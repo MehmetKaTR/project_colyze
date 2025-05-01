@@ -1,0 +1,29 @@
+# Node modules
+colyze/node_modules/
+
+# Build output
+build/
+dist/
+
+# React environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Python virtualenv
+venv/
+flask-server/colyze-flask-env/
+
+# __pycache__ ve diğer Python artıkları
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code
+.vscode/
+
+# MacOS
+.DS_Store
