@@ -48,3 +48,14 @@ body {
   opacity: 1;
   transform: translateY(0);
 }
+
+.polygon {
+  position: absolute;
+  pointer-events: all; /* Poligon üzerine tıklanabilirlik */
+  cursor: pointer;
+}
+
+
+.polygon.focused {
+  stroke: red;
+}
