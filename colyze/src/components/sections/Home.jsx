@@ -11,7 +11,7 @@ export const Home = () => {
   // Sayfa yüklendiğinde polygons2.csv dosyasından verileri al
   useEffect(() => {
     const loadPolygonsFromCSV = async () => {
-      const response = await fetch('colyze/polygons.csv');
+      const response = await fetch('colyze/documents/polygons.csv');
       const data = await response.text();
       
       const rows = data.split("\n");
@@ -124,19 +124,52 @@ const handleClick = (e) => {
     }
   };
 
-  // .csv'ye kaydet
-  const savePolygonsToCSV = () => {
-    const csvData = polygons.map((polygon) => {
-      return `${polygon.id},${polygon.points.map((p) => `${p.x},${p.y}`).join(" ")}\n`;
-    });
-    const blob = new Blob([csvData.join("")], { type: "text/csv" });
-    saveAs(blob, "polygons.csv");
+  const savePolygonsToCSV = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/save-polygons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(polygons),
+      });
+  
+      if (!response.ok) throw new Error('Failed to save');
+  
+      alert("Polygons saved successfully!");
+    } catch (error) {
+      console.error("Error saving polygons:", error);
+      alert("Error saving polygons!");
+    }
   };
+
+
+  const sendCsvToCalculateRgbi = async () => {
+    try {
+      const response = await fetch('colyze/documents/polygons.csv');
+      const csvText = await response.text();
+  
+      const result = await fetch('http://localhost:5050/calculate_rgbi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: csvText,
+      });
+      console.log(result.body);
+  
+      const json = await result.json();
+      console.log("RGBI Results:", json);
+      alert("RGBI calculation complete. Check console for result.");
+    } catch (err) {
+      console.error("Failed to calculate RGBI:", err);
+      alert("RGBI calculation failed.");
+    }
+  };
+  
+  
 
   return (
     <section className="min-h-screen pt-24 px-8 pb-8 bg-white text-white">
       <div className="flex space-x-4" onClick={handleClick}>
         <div className="w-full h-[700px] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
+          {/*<Camera/>*/}
           {polygons.map((polygon) => (
             <Polygon key={polygon.id} polygon={{ ...polygon, focused: polygon.id === focusedId }} onUpdate={handlePolygonUpdate} />
 
@@ -144,15 +177,22 @@ const handleClick = (e) => {
         </div>
         <ControlPanel />
       </div>
-      <button onClick={addPolygon} className="mt-4 p-2 bg-blue-500 text-white rounded">
+      <button onClick={addPolygon} className="mt-4 p-2 bg-blue-500 text-white rounded m-3">
         Add Tool
       </button>
-      <button onClick={deleteFocusedPolygon} className="mt-2 p-2 bg-red-500 text-white rounded">
+      <button onClick={deleteFocusedPolygon} className="mt-2 p-2 bg-red-500 text-white rounded m-3">
         Delete Tool
       </button>
-      <button onClick={savePolygonsToCSV} className="mt-2 p-2 bg-green-500 text-white rounded">
+      <button onClick={savePolygonsToCSV} className="mt-2 p-2 bg-green-500 text-white rounded m-3">
         Save Polygons to CSV
       </button>
+      <button
+        onClick={sendCsvToCalculateRgbi}
+        className="mt-2 p-2 bg-yellow-500 text-white rounded"
+      >
+        Calculate RGBI
+      </button>
+
     </section>
   );
 };
