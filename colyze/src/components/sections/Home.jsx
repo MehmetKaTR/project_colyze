@@ -7,6 +7,8 @@ import Polygon from "../Polygon";
 export const Home = () => {
   const [polygons, setPolygons] = useState([]);
   const [focusedId, setFocusedId] = useState(null);
+  const [rgbiResults, setRgbiResults] = useState([]);
+
 
   // Sayfa yüklendiğinde polygons2.csv dosyasından verileri al
   useEffect(() => {
@@ -152,11 +154,17 @@ const handleClick = (e) => {
         headers: { 'Content-Type': 'text/plain' },
         body: csvText,
       });
-      console.log(result.body);
   
       const json = await result.json();
       console.log("RGBI Results:", json);
-      alert("RGBI calculation complete. Check console for result.");
+  
+      // ID'ye göre sırala
+      const sortedResults = json.sort((a, b) => a.id - b.id);
+  
+      // State'e ata
+      setRgbiResults(sortedResults);
+  
+      alert("RGBI calculation complete.");
     } catch (err) {
       console.error("Failed to calculate RGBI:", err);
       alert("RGBI calculation failed.");
@@ -164,12 +172,13 @@ const handleClick = (e) => {
   };
   
   
+    
 
   return (
     <section className="min-h-screen pt-24 px-8 pb-8 bg-white text-white">
-      <div className="flex space-x-4" onClick={handleClick}>
-        <div className="w-full h-[700px] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
-          {/*<Camera/>*/}
+      <div className="flex space-x-4 space-y-4">
+        <div className="w-full h-[62vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative"  onClick={handleClick}>
+          <Camera/>
           {polygons.map((polygon) => (
             <Polygon key={polygon.id} polygon={{ ...polygon, focused: polygon.id === focusedId }} onUpdate={handlePolygonUpdate} />
 
@@ -177,6 +186,52 @@ const handleClick = (e) => {
         </div>
         <ControlPanel />
       </div>
+      <div className="flex flex-row space-x-4">
+
+      <div className="w-full h-full bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
+        <span className="flex justify-center items-center text-black">TOOL PARAMETERS</span>
+
+      
+      </div>
+
+      <div className="w-full h-[25vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
+        <span className="flex justify-center items-center text-black font-bold mb-4">MEASUREMENT RESULTS</span>
+
+        <div className="h-full overflow-auto">
+          {rgbiResults.length === 0 ? (
+            <p className="text-center">No results yet.</p>
+          ) : (
+            <div className="overflow-hidden">
+              <table className="min-w-full text-sm text-center">
+                <thead className="bg-gray-300">
+                  <tr>
+                    <th className="py-2 px-4">ID</th>
+                    <th className="py-2 px-4">R</th>
+                    <th className="py-2 px-4">G</th>
+                    <th className="py-2 px-4">B</th>
+                    <th className="py-2 px-4">I</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rgbiResults.map((tool) => (
+                    <tr key={tool.id} className="border-t">
+                      <td className="py-1 px-4">{tool.id}</td>
+                      <td className="py-1 px-4">{tool.avg_r.toFixed(2)}</td>
+                      <td className="py-1 px-4">{tool.avg_g.toFixed(2)}</td>
+                      <td className="py-1 px-4">{tool.avg_b.toFixed(2)}</td>
+                      <td className="py-1 px-4">{tool.intensity.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+    </div>
+
+
+      </div>
+
       <button onClick={addPolygon} className="mt-4 p-2 bg-blue-500 text-white rounded m-3">
         Add Tool
       </button>
