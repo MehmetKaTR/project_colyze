@@ -5,19 +5,29 @@ import ControlPanel from "../ControlPanel";
 import Polygon from "../Polygon";
 
 export const Home = () => {
+  const [typeNo, setTypeNo] = useState(null);
   const [polygons, setPolygons] = useState([]);
   const [focusedId, setFocusedId] = useState(null);
   const [rgbiResults, setRgbiResults] = useState([]);
 
-
-  // Sayfa yüklendiğinde polygons2.csv dosyasından verileri al
   useEffect(() => {
-    const loadPolygonsFromCSV = async () => {
-      const response = await fetch('colyze/documents/polygons.csv');
+    const init = async () => {
+      const type = await getTypeProgNO();      
+      if (type !== null) {
+        await loadPolygonsFromCSV(type); 
+      }
+    };
+
+    init();
+  }, []);
+
+  const loadPolygonsFromCSV = async (typeNo) => {
+    try {
+      const response = await fetch(`colyze/documents/types/type_${typeNo}/p2.csv`);
       const data = await response.text();
-      
+  
       const rows = data.split("\n");
-      const loadedPolygons = rows.map((row, index) => {
+      const loadedPolygons = rows.map((row) => {
         const [id, ...points] = row.split(",");
         if (id) {
           const polygonPoints = [];
@@ -28,11 +38,36 @@ export const Home = () => {
         }
         return null;
       }).filter(Boolean);
-
+  
       setPolygons(loadedPolygons);
-    };
-    loadPolygonsFromCSV();
-  }, []);
+    } catch (error) {
+      console.error('CSV yüklenirken hata:', error.message);
+    }
+  };
+  
+  const getTypeProgNO = async () => {
+    try{
+      const response = await fetch('http://localhost:3050/get_type', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) throw new Error('Failed to save');
+
+      const data = await response.json();
+      const typeNo = data[0]?.type_no;
+
+      setTypeNo(typeNo);
+      console.log('typeNo:', typeNo);
+
+      return typeNo;
+    }
+    catch (error){
+      console.error('Hata:', error.message);
+      return null;
+    }
+  }
+  
 
   const addPolygon = () => {
     setPolygons((prevPolygons) => {
@@ -178,7 +213,7 @@ const handleClick = (e) => {
     <section className="min-h-screen pt-24 px-8 pb-8 bg-white text-white">
       <div className="flex space-x-4 space-y-4">
         <div className="w-full h-[62vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative"  onClick={handleClick}>
-          <Camera/>
+          {/*<Camera/>*/}
           {polygons.map((polygon) => (
             <Polygon key={polygon.id} polygon={{ ...polygon, focused: polygon.id === focusedId }} onUpdate={handlePolygonUpdate} />
 

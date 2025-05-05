@@ -5,22 +5,20 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/get_type')
+@app.route('/get_type', methods=['GET'])
 def get_typeNo():
-    results = []
-    results.append({
+    results = [{
         'type_no': 1,
-    })
+    }]
 
     return jsonify(results)
 
 
-@app.route('/get_program')
+@app.route('/get_program', methods=['GET'])
 def get_programNo():
-    results = []
-    results.append({
+    results = [{
         'program_no': 2,
-    })
+    }]
 
     return jsonify(results)
 
