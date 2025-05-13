@@ -1,18 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 
-const Camera = ({ isRunning }) => {
+const Camera = () => {
   const [imageSrc, setImageSrc] = useState('');
+  const containerRef = useRef(null);
   const intervalRef = useRef(null);
 
-  useEffect(() => {
-    intervalRef.current = setInterval(fetchImage, 500);
-
-    return () => clearInterval(intervalRef.current);
-  }, [isRunning]);
-
-  const fetchImage = async () => {
+  const fetchImage = async (width, height) => {
     try {
-      const response = await fetch('http://localhost:5050/live_camera');
+      const response = await fetch(`http://localhost:5050/live_camera?width=${width}&height=${height}`);
       const data = await response.json();
       if (data.image) {
         setImageSrc(data.image);
@@ -22,13 +17,31 @@ const Camera = ({ isRunning }) => {
     }
   };
 
+  useEffect(() => {
+    const updateAndFetch = () => {
+      if (containerRef.current) {
+        const { offsetWidth, offsetHeight } = containerRef.current;
+        fetchImage(offsetWidth, offsetHeight);
+      }
+    };
+
+    updateAndFetch();
+    intervalRef.current = setInterval(updateAndFetch, 500);
+
+    return () => clearInterval(intervalRef.current);
+  }, []);
+
   return (
-    <div className="relative w-full h-full flex justify-center items-center rounded-xl overflow-hidden">
+    <div
+      ref={containerRef}
+      className="relative w-full h-full flex justify-center items-center rounded-xl overflow-hidden"
+    >
       {imageSrc && (
         <img
+          id="camera-frame" // 🔴 Önemli: RGBI hesaplama için bu ID kullanılacak
           src={imageSrc}
           alt="camera"
-          className="object-cover w-full h-full"
+          className="object-contain w-full h-full"
         />
       )}
     </div>

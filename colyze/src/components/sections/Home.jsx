@@ -1,72 +1,120 @@
-import { useState, useEffect } from "react";
-import { saveAs } from "file-saver";
+import { useState, useEffect, useRef } from "react";
 import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
 import Polygon from "../Polygon";
 
 export const Home = () => {
+  const cameraContainerRef = useRef(null);
   const [typeNo, setTypeNo] = useState(null);
+  const [prevTypeNo, setPrevTypeNo] = useState(null); 
   const [polygons, setPolygons] = useState([]);
   const [focusedId, setFocusedId] = useState(null);
   const [rgbiResults, setRgbiResults] = useState([]);
 
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (cameraContainerRef.current) {
+        const { width, height } = cameraContainerRef.current.getBoundingClientRect();
+        setContainerSize({ width, height });
+      }
+    };
+
+    updateSize(); // ilk render
+
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
+
+
+  // type_no'yu periyodik olarak kontrol et
+  useEffect(() => {
+    const interval = setInterval(() => {
+      getTypeProgNO();
+    }, 2000); // 2 saniyede bir kontrol et
+
+    return () => clearInterval(interval); // component unmount olursa interval iptal edilir
+  }, []);
+
+  // typeNo veya prevTypeNo değiştiğinde CSV dosyasını yükle
   useEffect(() => {
     const init = async () => {
-      const type = await getTypeProgNO();      
-      if (type !== null) {
-        await loadPolygonsFromCSV(type); 
+      if (typeNo !== null) {
+        if (typeNo !== prevTypeNo) {
+          await loadPolygonsFromCSV(typeNo);
+          setPrevTypeNo(typeNo);
+        } else {
+          await loadPolygonsFromCSV("polygons");
+        }
       }
     };
 
     init();
-  }, []);
+  }, [typeNo]);
+  
+  const CAMERA_WIDTH = 1920;
+  const CAMERA_HEIGHT = 1080;
 
   const loadPolygonsFromCSV = async (typeNo) => {
     try {
-      const response = await fetch(`colyze/documents/types/type_${typeNo}/p2.csv`);
+      const fileName = typeNo === "polygons"
+        ? 'polygons.csv'
+        : `types/type_${typeNo}/p2.csv`;
+
+      const response = await fetch(`colyze/documents/${fileName}`);
       const data = await response.text();
-  
+
       const rows = data.split("\n");
       const loadedPolygons = rows.map((row) => {
         const [id, ...points] = row.split(",");
         if (id) {
           const polygonPoints = [];
           for (let i = 0; i < points.length; i += 2) {
-            polygonPoints.push({ x: parseFloat(points[i]), y: parseFloat(points[i + 1]) });
+            const x = parseFloat(points[i]);
+            const y = parseFloat(points[i + 1]);
+
+            const scaledX = x * (containerSize.width / CAMERA_WIDTH);
+            const scaledY = y * (containerSize.height / CAMERA_HEIGHT);
+
+            polygonPoints.push({ x: scaledX, y: scaledY });
           }
           return { id: parseInt(id), points: polygonPoints };
         }
         return null;
       }).filter(Boolean);
-  
+
       setPolygons(loadedPolygons);
     } catch (error) {
       console.error('CSV yüklenirken hata:', error.message);
     }
   };
-  
+
+
   const getTypeProgNO = async () => {
-    try{
+    try {
       const response = await fetch('http://localhost:3050/get_type', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
 
-      if (!response.ok) throw new Error('Failed to save');
+      if (!response.ok) throw new Error('Failed to get type');
 
       const data = await response.json();
-      const typeNo = data[0]?.type_no;
+      const newTypeNo = data[0]?.type_no;
 
-      setTypeNo(typeNo);
-      console.log('typeNo:', typeNo);
+      // Yalnızca typeNo değişmişse set et
+      if (newTypeNo !== typeNo) {
+        setTypeNo(newTypeNo);
+        console.log('typeNo değişti:', newTypeNo);
+      }
 
-      return typeNo;
-    }
-    catch (error){
+      return newTypeNo;
+    } catch (error) {
       console.error('Hata:', error.message);
       return null;
     }
-  }
+  };
   
 
   const addPolygon = () => {
@@ -163,10 +211,41 @@ const handleClick = (e) => {
 
   const savePolygonsToCSV = async () => {
     try {
+      const container = document.getElementById("camera-container");
+      const canvasWidth = container.offsetWidth;
+      const canvasHeight = container.offsetHeight;
+
+      const payload = {
+        width: canvasWidth,
+        height: canvasHeight,
+        polygons: polygons
+      };
+      console.log("Payload being sent:", payload);
+
       const response = await fetch('http://localhost:3000/save-polygons', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(polygons),
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) throw new Error('Failed to save');
+
+      alert("Polygons saved successfully!");
+    } catch (error) {
+      console.error("Error saving polygons:", error);
+      alert("Error saving polygons!");
+    }
+  };
+
+  const saveTypePolygonsToCSV = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/save-polygons-to-type-csv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          typeNo: typeNo,  // typeNo'yu buraya ekliyoruz
+          polygons: polygons
+        }),
       });
   
       if (!response.ok) throw new Error('Failed to save');
@@ -177,49 +256,79 @@ const handleClick = (e) => {
       alert("Error saving polygons!");
     }
   };
-
-
+  
   const sendCsvToCalculateRgbi = async () => {
     try {
       const response = await fetch('colyze/documents/polygons.csv');
       const csvText = await response.text();
-  
+
+      // Gösterilen görüntüyü (base64) al
+      const imageElement = document.getElementById("camera-frame");
+      if (!imageElement) {
+        alert("Kamera görüntüsü bulunamadı.");
+        return;
+      }
+
+      // img'den canvas'a çizip base64 al
+      const canvas = document.createElement('canvas');
+      canvas.width = imageElement.width;
+      canvas.height = imageElement.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+
+      const imageDataUrl = canvas.toDataURL('image/jpeg'); // base64
+
+      // API'ye hem csv hem de img gönder
       const result = await fetch('http://localhost:5050/calculate_rgbi', {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: csvText,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          csv: csvText,
+          image: imageDataUrl
+        }),
       });
-  
+
       const json = await result.json();
       console.log("RGBI Results:", json);
-  
-      // ID'ye göre sırala
+
       const sortedResults = json.sort((a, b) => a.id - b.id);
-  
-      // State'e ata
       setRgbiResults(sortedResults);
-  
+
       alert("RGBI calculation complete.");
     } catch (err) {
       console.error("Failed to calculate RGBI:", err);
       alert("RGBI calculation failed.");
     }
   };
-  
-  
-    
 
   return (
-    <section className="min-h-screen pt-24 px-8 pb-8 bg-white text-white">
-      <div className="flex space-x-4 space-y-4">
-        <div className="w-full h-[62vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative"  onClick={handleClick}>
-          {/*<Camera/>*/}
-          {polygons.map((polygon) => (
-            <Polygon key={polygon.id} polygon={{ ...polygon, focused: polygon.id === focusedId }} onUpdate={handlePolygonUpdate} />
-
-          ))}
+      <section className="min-h-screen pt-24 px-8 pb-8 bg-white text-white">
+        <div className="flex space-x-4 space-y-4">
+          <div
+          ref={cameraContainerRef}
+          id="camera-container"
+          className="relative w-full h-[62vh] bg-gray-200 rounded-xl p-4 shadow-xl text-black"
+          onClick={handleClick}
+        >
+          <Camera />
+          {polygons.map((polygon, index) => {
+            const polygonId = isNaN(polygon.id) ? `polygon-${index}` : polygon.id;
+            return (
+              <Polygon
+                key={polygonId}
+                polygon={{ ...polygon, focused: polygon.id === focusedId }}
+                onUpdate={handlePolygonUpdate}
+              />
+            );
+          })}
         </div>
-        <ControlPanel />
+        <ControlPanel
+          onAdd={addPolygon}
+          onDelete={deleteFocusedPolygon}
+          onSave={savePolygonsToCSV}
+          onCalculate={sendCsvToCalculateRgbi}
+          onTypeSave={saveTypePolygonsToCSV}
+        />
       </div>
       <div className="flex flex-row space-x-4">
 
@@ -263,25 +372,7 @@ const handleClick = (e) => {
           )}
         </div>
     </div>
-
-
-      </div>
-
-      <button onClick={addPolygon} className="mt-4 p-2 bg-blue-500 text-white rounded m-3">
-        Add Tool
-      </button>
-      <button onClick={deleteFocusedPolygon} className="mt-2 p-2 bg-red-500 text-white rounded m-3">
-        Delete Tool
-      </button>
-      <button onClick={savePolygonsToCSV} className="mt-2 p-2 bg-green-500 text-white rounded m-3">
-        Save Polygons to CSV
-      </button>
-      <button
-        onClick={sendCsvToCalculateRgbi}
-        className="mt-2 p-2 bg-yellow-500 text-white rounded"
-      >
-        Calculate RGBI
-      </button>
+  </div>
 
     </section>
   );

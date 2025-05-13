@@ -1,6 +1,27 @@
 import React from 'react';
 
-const ControlPanel = () => {
+const stopCamera = async () => {
+  try {
+    const response = await fetch('http://localhost:5050/stop_camera');
+    const data = await response.json();
+    console.log(data.status || data.error);
+  } catch (error) {
+    console.error('Kamera durdurulamadı:', error);
+  }
+};
+  
+const startCamera = async () => {
+  try {
+    const response = await fetch('http://localhost:5050/start_camera');
+    const data = await response.json();
+    console.log(data.status || data.error);
+  } catch (error) {
+    console.error('Kamera başlatılamadı:', error);
+  }
+};
+
+
+const ControlPanel = ({ onAdd, onDelete, onSave, onCalculate, onTypeSave }) => {
   return (
     <>
       <div className="w-[400px] h-[62vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black flex flex-col space-y-4">
@@ -26,7 +47,7 @@ const ControlPanel = () => {
         </div>
 
         <div className="flex flex-row items-strect space-x-4">
-          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow">
+          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={onTypeSave}>
             TYPE SAVE
           </button>
 
@@ -36,23 +57,23 @@ const ControlPanel = () => {
         </div>
 
         <div className="flex flex-row items-strect space-x-4">
-          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow">
+          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={onAdd}>
             TOOL ADD
           </button>
 
-          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow">
+          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={onDelete}>
             TOOL DELETE
           </button>
         </div>
 
         <div className="flex flex-row items-center space-x-4">
-          <button className="w-full bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow">
+          <button className="w-full bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={onSave}>
             TOOL SAVE
           </button>
         </div>
 
         <div className="flex flex-row items-strect space-x-4">
-          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow">
+          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={onCalculate}>
             MEASURE
           </button>
 
@@ -66,12 +87,18 @@ const ControlPanel = () => {
   {["Stop Camera", "Start Camera", "Capture", "Device", "Properties"].map((text, index) => (
     <div
       key={index}
+      onClick={() => {
+        if (text === "Stop Camera") stopCamera();
+        if (text === "Start Camera") startCamera();
+      }}
       className="transform rotate-90 whitespace-nowrap text-gray-600 cursor-pointer hover:text-blue-500 active:text-blue-700 active:shadow-inner active:shadow-blue-500 text-sm py-4"
     >
       {text}
     </div>
   ))}
 </div>
+
+
 
     </>
   );
