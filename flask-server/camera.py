@@ -92,6 +92,7 @@ def calculate_rgbi():
 
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = rgb_frame.shape
+        print(height, width)
 
         results = []
         reader = csv.reader(csv_text.strip().split('\n'))

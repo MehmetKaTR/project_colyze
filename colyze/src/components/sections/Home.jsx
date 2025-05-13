@@ -11,23 +11,6 @@ export const Home = () => {
   const [focusedId, setFocusedId] = useState(null);
   const [rgbiResults, setRgbiResults] = useState([]);
 
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-
-  useEffect(() => {
-    const updateSize = () => {
-      if (cameraContainerRef.current) {
-        const { width, height } = cameraContainerRef.current.getBoundingClientRect();
-        setContainerSize({ width, height });
-      }
-    };
-
-    updateSize(); // ilk render
-
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
-  }, []);
-
-
   // type_no'yu periyodik olarak kontrol et
   useEffect(() => {
     const interval = setInterval(() => {
@@ -216,8 +199,8 @@ const handleClick = (e) => {
       const canvasHeight = container.offsetHeight;
 
       const payload = {
-        width: canvasWidth,
-        height: canvasHeight,
+        width: 1920,
+        height: 1080,
         polygons: polygons
       };
       console.log("Payload being sent:", payload);
@@ -301,6 +284,40 @@ const handleClick = (e) => {
     }
   };
 
+const resetPolygonPosition = (polygonId) => {
+  setPolygons((prevPolygons) =>
+    prevPolygons.map((polygon) => {
+      if (polygon.id !== polygonId) return polygon;
+
+      const points = polygon.points;
+      if (points.length === 0) return polygon;
+
+      // İlk noktayı baz alarak kaydırma miktarı hesapla
+      const dx = points[0].x;
+      const dy = points[0].y;
+
+      // Bütün noktaları orijine (örneğin x=10, y=10) taşı
+      const targetX = 100;
+      const targetY = 100;
+
+      const offsetX = targetX - dx;
+      const offsetY = targetY - dy;
+
+      const movedPoints = points.map((p) => ({
+        x: p.x + offsetX,
+        y: p.y + offsetY,
+      }));
+
+      return {
+        ...polygon,
+        points: movedPoints,
+      };
+    })
+  );
+};
+
+
+
   return (
       <section className="min-h-screen pt-24 px-8 pb-8 bg-white text-white">
         <div className="flex space-x-4 space-y-4">
@@ -310,17 +327,12 @@ const handleClick = (e) => {
           className="relative w-full h-[62vh] bg-gray-200 rounded-xl p-4 shadow-xl text-black"
           onClick={handleClick}
         >
-          <Camera />
-          {polygons.map((polygon, index) => {
-            const polygonId = isNaN(polygon.id) ? `polygon-${index}` : polygon.id;
-            return (
-              <Polygon
-                key={polygonId}
-                polygon={{ ...polygon, focused: polygon.id === focusedId }}
-                onUpdate={handlePolygonUpdate}
-              />
-            );
-          })}
+          <Camera
+            polygons={polygons}
+            focusedId={focusedId}
+            onPolygonUpdate={handlePolygonUpdate}
+          />
+
         </div>
         <ControlPanel
           onAdd={addPolygon}
@@ -334,7 +346,28 @@ const handleClick = (e) => {
 
       <div className="w-full h-full bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
         <span className="flex justify-center items-center text-black">TOOL PARAMETERS</span>
-
+        <div className="mt-4 space-y-2">
+          {polygons.map((polygon) => (
+            <div
+              key={polygon.id}
+              className={`flex justify-between items-center px-4 py-2 rounded-md cursor-pointer ${
+                focusedId === polygon.id ? 'bg-blue-300' : 'bg-white hover:bg-gray-100'
+              }`}
+              onClick={() => setFocusedId(polygon.id)}
+            >
+              <span className="text-black font-medium">Polygon {polygon.id}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation(); // Row'a tıklanmasın
+                  resetPolygonPosition(polygon.id);
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded-md text-xs"
+              >
+                Reset
+              </button>
+            </div>
+          ))}
+        </div>
       
       </div>
 
