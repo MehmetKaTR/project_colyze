@@ -77,7 +77,7 @@ export const Home = () => {
             const scaledX = x * (containerSize.width / CAMERA_WIDTH);
             const scaledY = y * (containerSize.height / CAMERA_HEIGHT);
 
-            polygonPoints.push({ x: scaledX, y: scaledY });
+            polygonPoints.push({ x: x, y: y });
           }
           return { id: parseInt(id), points: polygonPoints };
         }
