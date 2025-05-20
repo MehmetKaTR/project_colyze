@@ -21,7 +21,7 @@ const startCamera = async () => {
 };
 
 
-const ControlPanel = ({ onAdd, onDelete, onSave, onCalculate, onTypeSave }) => {
+const ControlPanel = ({ onAdd, onDelete, onSave, onCalculate, onTeach, onTypeSave }) => {
   return (
     <>
       <div className="w-[400px] h-[62vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black flex flex-col space-y-4">
@@ -77,7 +77,7 @@ const ControlPanel = ({ onAdd, onDelete, onSave, onCalculate, onTypeSave }) => {
             MEASURE
           </button>
 
-          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow">
+          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow"  onClick={onTeach}>
             TEACH
           </button>
         </div>

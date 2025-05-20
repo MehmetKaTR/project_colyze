@@ -14,7 +14,8 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
   const lastOffset = useRef({ x: 0, y: 0 });
 
   const handleMouseDown = (e) => {
-    if (e.buttons === 3) {
+    if (e.ctrlKey && e.button === 0) {
+      e.preventDefault(); // Sağ tık menüsünün çıkmasını engellemek için
       setIsDragging(true);
       dragStart.current = { x: e.clientX, y: e.clientY };
     }
@@ -83,6 +84,7 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      onContextMenu={e => e.preventDefault()}
     >
       {/* Görüntü ve poligonlar aynı kapsayıcıda, birlikte hareket eder */}
       <div

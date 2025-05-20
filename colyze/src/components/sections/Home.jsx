@@ -1,104 +1,46 @@
 import { useState, useEffect, useRef } from "react";
 import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
-import Polygon from "../Polygon";
+import {loadPolygonsFromCSV, getTypeProgNO} from "../Flask";
 
 export const Home = () => {
   const cameraContainerRef = useRef(null);
   const [typeNo, setTypeNo] = useState(null);
+  const [progNo, setProgNo] = useState(null);
   const [prevTypeNo, setPrevTypeNo] = useState(null); 
   const [polygons, setPolygons] = useState([]);
   const [focusedId, setFocusedId] = useState(null);
+  const [tolerance, setTolerance] = useState(null);
   const [rgbiResults, setRgbiResults] = useState([]);
 
-  // type_no'yu periyodik olarak kontrol et
   useEffect(() => {
-    const interval = setInterval(() => {
-      getTypeProgNO();
-    }, 2000); // 2 saniyede bir kontrol et
+    const interval = setInterval(async () => {
+      const newTypeNo = await getTypeProgNO();
+      if (newTypeNo !== null && newTypeNo !== typeNo) {
+        setTypeNo(newTypeNo);
+        console.log("typeNo değişti:", newTypeNo);
+      }
+    }, 2000);
 
-    return () => clearInterval(interval); // component unmount olursa interval iptal edilir
-  }, []);
+    return () => clearInterval(interval);
+  }, [typeNo]); // typeNo'yu da dependency'e ekle
 
-  // typeNo veya prevTypeNo değiştiğinde CSV dosyasını yükle
   useEffect(() => {
     const init = async () => {
       if (typeNo !== null) {
+        let loaded;
         if (typeNo !== prevTypeNo) {
-          await loadPolygonsFromCSV(typeNo);
+          loaded = await loadPolygonsFromCSV(typeNo);
           setPrevTypeNo(typeNo);
         } else {
-          await loadPolygonsFromCSV("polygons");
+          loaded = await loadPolygonsFromCSV("polygons");
         }
+        setPolygons(loaded);
       }
     };
 
     init();
   }, [typeNo]);
-  
-  const CAMERA_WIDTH = 1920;
-  const CAMERA_HEIGHT = 1080;
-
-  const loadPolygonsFromCSV = async (typeNo) => {
-    try {
-      const fileName = typeNo === "polygons"
-        ? 'polygons.csv'
-        : `types/type_${typeNo}/p2.csv`;
-
-      const response = await fetch(`colyze/documents/${fileName}`);
-      const data = await response.text();
-
-      const rows = data.split("\n");
-      const loadedPolygons = rows.map((row) => {
-        const [id, ...points] = row.split(",");
-        if (id) {
-          const polygonPoints = [];
-          for (let i = 0; i < points.length; i += 2) {
-            const x = parseFloat(points[i]);
-            const y = parseFloat(points[i + 1]);
-
-            const scaledX = x * (containerSize.width / CAMERA_WIDTH);
-            const scaledY = y * (containerSize.height / CAMERA_HEIGHT);
-
-            polygonPoints.push({ x: x, y: y });
-          }
-          return { id: parseInt(id), points: polygonPoints };
-        }
-        return null;
-      }).filter(Boolean);
-
-      setPolygons(loadedPolygons);
-    } catch (error) {
-      console.error('CSV yüklenirken hata:', error.message);
-    }
-  };
-
-
-  const getTypeProgNO = async () => {
-    try {
-      const response = await fetch('http://localhost:3050/get_type', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      if (!response.ok) throw new Error('Failed to get type');
-
-      const data = await response.json();
-      const newTypeNo = data[0]?.type_no;
-
-      // Yalnızca typeNo değişmişse set et
-      if (newTypeNo !== typeNo) {
-        setTypeNo(newTypeNo);
-        console.log('typeNo değişti:', newTypeNo);
-      }
-
-      return newTypeNo;
-    } catch (error) {
-      console.error('Hata:', error.message);
-      return null;
-    }
-  };
-  
 
   const addPolygon = () => {
     setPolygons((prevPolygons) => {
@@ -159,30 +101,21 @@ const handleClick = (e) => {
   const clickY = e.clientY;
   const clickPoint = { x: clickX, y: clickY };
 
-  let closestPolygon = null;
-  let minDistance = Infinity;
+  let foundPolygon = null;
 
   polygons.forEach((polygon) => {
-    // Eğer tıklama poligonun içinde ise, onu focusla
     if (isPointInPolygon(clickPoint, polygon)) {
-      closestPolygon = polygon;
-      return;  // İçinde bulduğumuz poligonu hemen seçiyoruz
-    }
-
-    // Eğer içeride değilse, merkeze olan mesafeyi hesapla
-    const center = calculatePolygonCenter(polygon);
-    const distance = calculateDistance(clickPoint, center);
-
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestPolygon = polygon;
+      foundPolygon = polygon;
     }
   });
 
-  if (closestPolygon) {
-    setFocusedId(closestPolygon.id);
+  if (foundPolygon) {
+    setFocusedId(foundPolygon.id);
+  } else {
+    setFocusedId(null);  // Hiçbir poligonun içinde değilse odak iptal edilir
   }
 };
+
 
 
   const deleteFocusedPolygon = () => {
@@ -195,8 +128,7 @@ const handleClick = (e) => {
   const savePolygonsToCSV = async () => {
     try {
       const container = document.getElementById("camera-container");
-      const canvasWidth = container.offsetWidth;
-      const canvasHeight = container.offsetHeight;
+
 
       const payload = {
         width: 1920,
@@ -245,78 +177,160 @@ const handleClick = (e) => {
       const response = await fetch('colyze/documents/polygons.csv');
       const csvText = await response.text();
 
-      // Gösterilen görüntüyü (base64) al
       const imageElement = document.getElementById("camera-frame");
       if (!imageElement) {
         alert("Kamera görüntüsü bulunamadı.");
         return;
       }
 
-      // img'den canvas'a çizip base64 al
       const canvas = document.createElement('canvas');
       canvas.width = imageElement.width;
       canvas.height = imageElement.height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+      const imageDataUrl = canvas.toDataURL('image/jpeg');
 
-      const imageDataUrl = canvas.toDataURL('image/jpeg'); // base64
-
-      // API'ye hem csv hem de img gönder
       const result = await fetch('http://localhost:5050/calculate_rgbi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          csv: csvText,
-          image: imageDataUrl
-        }),
+        body: JSON.stringify({ csv: csvText, image: imageDataUrl }),
       });
 
       const json = await result.json();
-      console.log("RGBI Results:", json);
 
-      const sortedResults = json.sort((a, b) => a.id - b.id);
-      setRgbiResults(sortedResults);
+      // Tolerans kontrolü yap
+      const checkedResults = json.map(tool => {
+        const tol = tolerance?.find(t => t.id === tool.id);
 
-      alert("RGBI calculation complete.");
+        if (!tol) {
+          // Eğer tolerans yoksa NOK yap
+          return { ...tool, status: "NOK" };
+        }
+
+        const isOk =
+          tool.avg_r >= tol.min_r && tool.avg_r <= tol.max_r &&
+          tool.avg_g >= tol.min_g && tool.avg_g <= tol.max_g &&
+          tool.avg_b >= tol.min_b && tool.avg_b <= tol.max_b &&
+          tool.intensity >= tol.min_i && tool.intensity <= tol.max_i;
+
+        return { ...tool, status: isOk ? "OK" : "NOK" };
+      });
+
+      setRgbiResults(checkedResults);
+      alert("Measurement complete.");
     } catch (err) {
       console.error("Failed to calculate RGBI:", err);
-      alert("RGBI calculation failed.");
+      alert("Measurement failed.");
     }
   };
 
-const resetPolygonPosition = (polygonId) => {
-  setPolygons((prevPolygons) =>
-    prevPolygons.map((polygon) => {
-      if (polygon.id !== polygonId) return polygon;
 
-      const points = polygon.points;
-      if (points.length === 0) return polygon;
+  const resetPolygonPosition = (polygonId) => {
+    setPolygons((prevPolygons) =>
+      prevPolygons.map((polygon) => {
+        if (polygon.id !== polygonId) return polygon;
 
-      // İlk noktayı baz alarak kaydırma miktarı hesapla
-      const dx = points[0].x;
-      const dy = points[0].y;
+        const points = polygon.points;
+        if (points.length === 0) return polygon;
 
-      // Bütün noktaları orijine (örneğin x=10, y=10) taşı
-      const targetX = 100;
-      const targetY = 100;
+        // İlk noktayı baz alarak kaydırma miktarı hesapla
+        const dx = points[0].x;
+        const dy = points[0].y;
 
-      const offsetX = targetX - dx;
-      const offsetY = targetY - dy;
+        // Bütün noktaları orijine (örneğin x=10, y=10) taşı
+        const targetX = 100;
+        const targetY = 100;
 
-      const movedPoints = points.map((p) => ({
-        x: p.x + offsetX,
-        y: p.y + offsetY,
+        const offsetX = targetX - dx;
+        const offsetY = targetY - dy;
+
+        const movedPoints = points.map((p) => ({
+          x: p.x + offsetX,
+          y: p.y + offsetY,
+        }));
+
+        return {
+          ...polygon,
+          points: movedPoints,
+        };
+      })
+    );
+  };
+
+  const TeachTheMeasurement = async () => {
+    try {
+      const response = await fetch('colyze/documents/polygons.csv');
+      const csvText = await response.text();
+
+      const imageElement = document.getElementById("camera-frame");
+      if (!imageElement) {
+        alert("Kamera görüntüsü bulunamadı.");
+        return;
+      }
+
+      let allResults = [];
+
+      for (let i = 0; i < 10; i++) {
+        // Canvas'a çizip base64 al
+        const canvas = document.createElement('canvas');
+        canvas.width = imageElement.width;
+        canvas.height = imageElement.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+        const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+        const result = await fetch('http://localhost:5050/calculate_rgbi', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csv: csvText, image: imageDataUrl }),
+        });
+
+        const json = await result.json();
+        allResults.push(json);
+      }
+
+      // allResults: 10 ölçüm sonucu array'leri, her biri id'lere göre objeler içeriyor.
+      // Şimdi aynı id'ye sahip ölçümlerin ortalamasını alıyoruz.
+
+      const averagedResults = allResults[0].map((_, idx) => {
+        const id = allResults[0][idx].id;
+        let sum_r = 0, sum_g = 0, sum_b = 0, sum_i = 0;
+        allResults.forEach(resultSet => {
+          sum_r += resultSet[idx].avg_r;
+          sum_g += resultSet[idx].avg_g;
+          sum_b += resultSet[idx].avg_b;
+          sum_i += resultSet[idx].intensity;
+        });
+        return {
+          id,
+          avg_r: sum_r / allResults.length,
+          avg_g: sum_g / allResults.length,
+          avg_b: sum_b / allResults.length,
+          intensity: sum_i / allResults.length,
+        };
+      });
+
+      // Tolerans değerleri oluştur (±20)
+      const toleranceValue = 20;
+      const toleranceLimits = averagedResults.map(r => ({
+        id: r.id,
+        min_r: r.avg_r - toleranceValue,
+        max_r: r.avg_r + toleranceValue,
+        min_g: r.avg_g - toleranceValue,
+        max_g: r.avg_g + toleranceValue,
+        min_b: r.avg_b - toleranceValue,
+        max_b: r.avg_b + toleranceValue,
+        min_i: r.intensity - toleranceValue,
+        max_i: r.intensity + toleranceValue,
       }));
 
-      return {
-        ...polygon,
-        points: movedPoints,
-      };
-    })
-  );
-};
-
-
+      setTolerance(toleranceLimits);
+      alert("Teaching complete. Tolerance values set.");
+    } catch (err) {
+      console.error("Teach failed:", err);
+      alert("Teaching failed.");
+    }
+  };
 
   return (
       <section className="min-h-screen pt-24 px-8 pb-8 bg-white text-white">
@@ -339,6 +353,7 @@ const resetPolygonPosition = (polygonId) => {
           onDelete={deleteFocusedPolygon}
           onSave={savePolygonsToCSV}
           onCalculate={sendCsvToCalculateRgbi}
+          onTeach={TeachTheMeasurement}
           onTypeSave={saveTypePolygonsToCSV}
         />
       </div>
@@ -387,16 +402,23 @@ const resetPolygonPosition = (polygonId) => {
                     <th className="py-2 px-4">G</th>
                     <th className="py-2 px-4">B</th>
                     <th className="py-2 px-4">I</th>
+                    <th className="py-2 px-4">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rgbiResults.map((tool) => (
-                    <tr key={tool.id} className="border-t">
+                    <tr
+                      key={tool.id}
+                      className={`border-t ${
+                        tool.status === "OK" ? "bg-green-200" : "bg-red-200"
+                      }`}
+                    >
                       <td className="py-1 px-4">{tool.id}</td>
                       <td className="py-1 px-4">{tool.avg_r.toFixed(2)}</td>
                       <td className="py-1 px-4">{tool.avg_g.toFixed(2)}</td>
                       <td className="py-1 px-4">{tool.avg_b.toFixed(2)}</td>
                       <td className="py-1 px-4">{tool.intensity.toFixed(2)}</td>
+                      <td className="py-1 px-4 font-bold">{tool.status}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -404,6 +426,7 @@ const resetPolygonPosition = (polygonId) => {
             </div>
           )}
         </div>
+
     </div>
   </div>
 
