@@ -33,7 +33,7 @@ export const loadPolygonsFromCSV = async (typeNo) => {
 // Flask.js
 export const getTypeProgNO = async () => {
   try {
-    const response = await fetch('http://localhost:3050/get_type', {
+    const response = await fetch('http://localhost:5050/get_type', {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });

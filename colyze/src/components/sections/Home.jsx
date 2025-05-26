@@ -80,41 +80,41 @@ export const Home = () => {
   
 
   // Bir poligonun içinde bir nokta olup olmadığını kontrol eden fonksiyon (ray-casting algoritması)
-const isPointInPolygon = (point, polygon) => {
-  let x = point.x, y = point.y;
-  let inside = false;
+  const isPointInPolygon = (point, polygon) => {
+    let x = point.x, y = point.y;
+    let inside = false;
 
-  for (let i = 0, j = polygon.points.length - 1; i < polygon.points.length; j = i++) {
-    let xi = polygon.points[i].x, yi = polygon.points[i].y;
-    let xj = polygon.points[j].x, yj = polygon.points[j].y;
+    for (let i = 0, j = polygon.points.length - 1; i < polygon.points.length; j = i++) {
+      let xi = polygon.points[i].x, yi = polygon.points[i].y;
+      let xj = polygon.points[j].x, yj = polygon.points[j].y;
 
-    let intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-    if (intersect) inside = !inside;
-  }
-
-  return inside;
-};
-
-// Click event'ini yakalamak için handleClick fonksiyonu
-const handleClick = (e) => {
-  const clickX = e.clientX;
-  const clickY = e.clientY;
-  const clickPoint = { x: clickX, y: clickY };
-
-  let foundPolygon = null;
-
-  polygons.forEach((polygon) => {
-    if (isPointInPolygon(clickPoint, polygon)) {
-      foundPolygon = polygon;
+      let intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
     }
-  });
 
-  if (foundPolygon) {
-    setFocusedId(foundPolygon.id);
-  } else {
-    setFocusedId(null);  // Hiçbir poligonun içinde değilse odak iptal edilir
-  }
-};
+    return inside;
+  };
+
+  // Click event'ini yakalamak için handleClick fonksiyonu
+  const handleClick = (e) => {
+    const clickX = e.clientX;
+    const clickY = e.clientY;
+    const clickPoint = { x: clickX, y: clickY };
+
+    let foundPolygon = null;
+
+    polygons.forEach((polygon) => {
+      if (isPointInPolygon(clickPoint, polygon)) {
+        foundPolygon = polygon;
+      }
+    });
+
+    if (foundPolygon) {
+      setFocusedId(foundPolygon.id);
+    } else {
+      setFocusedId(null);  // Hiçbir poligonun içinde değilse odak iptal edilir
+    }
+  };
 
 
 
@@ -137,7 +137,7 @@ const handleClick = (e) => {
       };
       console.log("Payload being sent:", payload);
 
-      const response = await fetch('http://localhost:3000/save-polygons', {
+      const response = await fetch('http://localhost:5050/save-polygons', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -154,7 +154,7 @@ const handleClick = (e) => {
 
   const saveTypePolygonsToCSV = async () => {
     try {
-      const response = await fetch('http://localhost:3000/save-polygons-to-type-csv', {
+      const response = await fetch('http://localhost:5050/save-polygons-to-type-csv', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -223,7 +223,6 @@ const handleClick = (e) => {
       alert("Measurement failed.");
     }
   };
-
 
   const resetPolygonPosition = (polygonId) => {
     setPolygons((prevPolygons) =>
@@ -333,12 +332,12 @@ const handleClick = (e) => {
   };
 
   return (
-      <section className="min-h-screen pt-24 px-8 pb-8 bg-white text-white">
+      <section className="min-h-screen pt-20 px-8 pb-8 bg-white text-white">
         <div className="flex space-x-4 space-y-4">
           <div
           ref={cameraContainerRef}
           id="camera-container"
-          className="relative w-full h-[62vh] bg-gray-200 rounded-xl p-4 shadow-xl text-black"
+          className="relative w-full h-[65vh] bg-gray-200 rounded-xl p-4 shadow-xl text-black"
           onClick={handleClick}
         >
           <Camera
@@ -359,9 +358,9 @@ const handleClick = (e) => {
       </div>
       <div className="flex flex-row space-x-4">
 
-      <div className="w-full h-full bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
-        <span className="flex justify-center items-center text-black">TOOL PARAMETERS</span>
-        <div className="mt-4 space-y-2">
+      <div className="w-full h-[30vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative flex flex-col">
+        <span className="flex justify-center items-center text-black font-bold mb-1">TOOL PARAMETERS</span>
+        <div className="space-y-2 flex-1 overflow-auto">
           {polygons.map((polygon) => (
             <div
               key={polygon.id}
@@ -373,7 +372,7 @@ const handleClick = (e) => {
               <span className="text-black font-medium">Polygon {polygon.id}</span>
               <button
                 onClick={(e) => {
-                  e.stopPropagation(); // Row'a tıklanmasın
+                  e.stopPropagation();
                   resetPolygonPosition(polygon.id);
                 }}
                 className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded-md text-xs"
@@ -383,11 +382,10 @@ const handleClick = (e) => {
             </div>
           ))}
         </div>
-      
       </div>
 
-      <div className="w-full h-[25vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
-        <span className="flex justify-center items-center text-black font-bold mb-4">MEASUREMENT RESULTS</span>
+      <div className="w-full h-[30vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
+        <span className="flex justify-center items-center text-black font-bold mb-1">MEASUREMENT RESULTS</span>
 
         <div className="h-full overflow-auto">
           {rgbiResults.length === 0 ? (

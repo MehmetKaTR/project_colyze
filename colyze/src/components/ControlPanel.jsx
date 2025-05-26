@@ -20,11 +20,44 @@ const startCamera = async () => {
   }
 };
 
+const sendResult = async () => {
+  const data = {
+    DateTime: "2025-05-26 14:30:00",
+    TypeNo: 1,
+    ProgNo: 100,
+    ToolNo: 5,
+    R: 255,
+    G: 255,
+    B: 255,
+    I: 100,
+    OK_NOK: "OK"
+  };
+
+  try {
+    const response = await fetch('http://localhost:5050/results', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      throw new Error('İstek başarısız oldu');
+    }
+
+    const result = await response.json();
+    console.log('Sunucudan cevap:', result);
+  } catch (error) {
+    console.error('Hata:', error);
+  }
+};
+
 
 const ControlPanel = ({ onAdd, onDelete, onSave, onCalculate, onTeach, onTypeSave }) => {
   return (
     <>
-      <div className="w-[400px] h-[62vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black flex flex-col space-y-4">
+      <div className="w-[400px] h-[65vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black flex flex-col space-y-4">
         <p className="flex justify-center text-[1.2rem]">TYPE NAME</p>
         <div className="w-full h-full flex justify-center items-center overflow-hidden bg-white drop-shadow-xl rounded-xl text-3xl font-semibold">P088</div>
 
@@ -83,7 +116,7 @@ const ControlPanel = ({ onAdd, onDelete, onSave, onCalculate, onTeach, onTypeSav
         </div>
       </div>
 
-      <div className="w-[16px] h-[62vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black flex flex-col justify-between items-center">
+      <div className="w-[16px] h-[65vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black flex flex-col justify-between items-center">
   {["Stop Camera", "Start Camera", "Capture", "Device", "Properties"].map((text, index) => (
     <div
       key={index}

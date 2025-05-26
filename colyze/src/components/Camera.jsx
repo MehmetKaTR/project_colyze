@@ -13,9 +13,14 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
   const dragStart = useRef({ x: 0, y: 0 });
   const lastOffset = useRef({ x: 0, y: 0 });
 
+  // 🔍 Zoom için scale state'i
+  const [scale, setScale] = useState(1);
+  const MIN_SCALE = 1;
+  const MAX_SCALE = 2.5;
+
   const handleMouseDown = (e) => {
     if (e.ctrlKey && e.button === 0) {
-      e.preventDefault(); // Sağ tık menüsünün çıkmasını engellemek için
+      e.preventDefault();
       setIsDragging(true);
       dragStart.current = { x: e.clientX, y: e.clientY };
     }
@@ -32,8 +37,8 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
       const container = containerRef.current;
       const maxX = 0;
       const maxY = 0;
-      const minX = container.offsetWidth - imageSize.width;
-      const minY = container.offsetHeight - imageSize.height;
+      const minX = container.offsetWidth - imageSize.width * scale;
+      const minY = container.offsetHeight - imageSize.height * scale;
 
       setOffset({
         x: Math.min(Math.max(newX, minX), maxX),
@@ -77,6 +82,31 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
     return () => clearInterval(intervalRef.current);
   }, []);
 
+  // 🔁 Scroll ile zoom kontrolü
+  useEffect(() => {
+    const handleWheel = (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.1 : -0.1;
+        setScale(prev => {
+          const next = Math.min(Math.max(prev + delta, MIN_SCALE), MAX_SCALE);
+          return parseFloat(next.toFixed(2));
+        });
+      }
+    };
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+    }
+
+    return () => {
+      if (container) {
+        container.removeEventListener('wheel', handleWheel);
+      }
+    };
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -86,11 +116,11 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
       onMouseUp={handleMouseUp}
       onContextMenu={e => e.preventDefault()}
     >
-      {/* Görüntü ve poligonlar aynı kapsayıcıda, birlikte hareket eder */}
       <div
         className="absolute top-0 left-0"
         style={{
-          transform: `translate(${offset.x}px, ${offset.y}px)`
+          transform: `translate(${offset.x}px, ${offset.y}px)`,
+          transformOrigin: 'top left'
         }}
       >
         {imageSrc && (
@@ -100,7 +130,9 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
             alt="camera"
             className="select-none"
             style={{
-              cursor: isDragging ? 'grabbing' : 'grab'
+              cursor: isDragging ? 'grabbing' : 'grab',
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left'
             }}
           />
         )}
