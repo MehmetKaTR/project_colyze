@@ -56,7 +56,7 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
 
   const fetchImage = async () => {
     try {
-      const response = await fetch(`http://localhost:5050/live_camera?width=1920&height=1080`);
+      const response = await fetch(`http://localhost:5050/live_camera`);
       const data = await response.json();
       if (data.image) {
         setImageSrc(data.image);
@@ -131,8 +131,13 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
             className="select-none"
             style={{
               cursor: isDragging ? 'grabbing' : 'grab',
+              width: 'auto',
+              height: 'auto',
+              maxWidth: 'none',
+              maxHeight: 'none',
               transform: `scale(${scale})`,
-              transformOrigin: 'top left'
+              transformOrigin: 'top left',
+              imageRendering: 'pixelated'
             }}
           />
         )}

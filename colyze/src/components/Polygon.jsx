@@ -8,12 +8,38 @@ const Polygon = ({ polygon, onClick, onUpdate }) => {
     if (e.button === 2) {
       e.preventDefault();
       if (typeof index === 'number') {
-        setDraggingIndex(index); // nokta drag
+        setDraggingIndex(index);
       } else if (polygon.focused) {
-        setDraggingPolygon(true); // tüm shape drag
+        setDraggingPolygon(true);
+      }
+    } else if (e.button === 0 && e.altKey && polygon.focused) {
+      e.preventDefault();
+
+      const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      const cursorpt = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+      let closestIndex = null;
+      let closestDist = Infinity;
+      polygon.points.forEach((p, i) => {
+        const dx = p.x - cursorpt.x;
+        const dy = p.y - cursorpt.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestIndex = i;
+        }
+      });
+
+      if (closestDist <= 10 && polygon.points.length > 3) {
+        const newPoints = polygon.points.filter((_, i) => i !== closestIndex);
+        onUpdate(polygon.id, newPoints);
       }
     }
   };
+
 
   const handleMouseUp = () => {
     setDraggingIndex(null);

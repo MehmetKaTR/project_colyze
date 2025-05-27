@@ -1,34 +1,71 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
+import ctypes
+import tisgrabber as tis
 import cv2
-import base64
 import numpy as np
+import base64
 import csv
 
 camera_bp = Blueprint('camera', __name__)
+ic = ctypes.cdll.LoadLibrary(r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\Colyze\flask-server\tisgrabber_x64.dll")
+
+tis.declareFunctions(ic)
+ic.IC_InitLibrary(0)
+
 camera = None
 
 def start_camera():
     global camera
     if camera is None:
-        camera = cv2.VideoCapture(0)
-        if not camera.isOpened():
+        camera = ic.IC_LoadDeviceStateFromFile(None, tis.T("device.xml"))
+        if not ic.IC_IsDevValid(camera):
             camera = None
             return False
+        ic.IC_StartLive(camera, 1)
     return True
 
 def stop_camera():
     global camera
     if camera is not None:
-        camera.release()
+        ic.IC_StopLive(camera)
+        ic.IC_ReleaseGrabber(camera)
         camera = None
         return True
     return False
 
 def get_current_frame():
-    if camera is None or not camera.isOpened():
+    global camera
+    if camera is None or not ic.IC_IsDevValid(camera):
         return None
-    ret, frame = camera.read()
-    return frame if ret else None
+
+    # Görüntü açıklaması bilgilerini çek
+    Width = ctypes.c_long()
+    Height = ctypes.c_long()
+    BitsPerPixel = ctypes.c_int()
+    ColorFormat = ctypes.c_int()
+
+    ic.IC_GetImageDescription(camera, Width, Height, BitsPerPixel, ColorFormat)
+
+    width = Width.value
+    height = Height.value
+    bpp = BitsPerPixel.value // 8
+    buffer_size = width * height * bpp
+
+    # Görüntüyü al
+    if ic.IC_SnapImage(camera, 2000) == tis.IC_SUCCESS:
+        image_ptr = ic.IC_GetImagePtr(camera)
+
+        imagedata = ctypes.cast(image_ptr, ctypes.POINTER(ctypes.c_ubyte * buffer_size))
+
+        image = np.ndarray(buffer=imagedata.contents,
+                           dtype=np.uint8,
+                           shape=(height, width, bpp))
+
+        # OpenCV işlemleri
+        image = cv2.flip(image, 0)
+        return image
+    else:
+        return None
 
 @camera_bp.route('/start_camera')
 def start_camera_route():
