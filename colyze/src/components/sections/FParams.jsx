@@ -3,28 +3,31 @@ import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
 import {loadPolygonsFromCSV, getTypeProgNO} from "../Flask";
 
-export const Home = () => {
+export const FParams = () => {
   const cameraContainerRef = useRef(null);
   const [typeNo, setTypeNo] = useState(null);
   const [progNo, setProgNo] = useState(null);
   const [prevTypeNo, setPrevTypeNo] = useState(null); 
   const [polygons, setPolygons] = useState([]);
   const [focusedId, setFocusedId] = useState(null);
+  const [cropMode, setCropMode] = useState(false);
   const [tolerance, setTolerance] = useState(null);
   const [rgbiResults, setRgbiResults] = useState([]);
 
   useEffect(() => {
     const interval = setInterval(async () => {
-      const newTypeNo = await getTypeProgNO();
-      if (newTypeNo !== null && newTypeNo !== typeNo) {
-        setTypeNo(newTypeNo);
-        console.log("typeNo değişti:", newTypeNo);
+      const result = await getTypeProgNO();
+      if (result && (result.typeNo !== typeNo || result.progNo !== progNo)) {
+        setTypeNo(result.typeNo);
+        setProgNo(result.progNo);
+        console.log("typeNo/progNo değişti:", result.typeNo, result.progNo);
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [typeNo]); // typeNo'yu da dependency'e ekle
+  }, [typeNo, progNo]);
 
+  
   useEffect(() => {
     const init = async () => {
       if (typeNo !== null) {
@@ -41,6 +44,7 @@ export const Home = () => {
 
     init();
   }, [typeNo]);
+  
 
   const addPolygon = () => {
     setPolygons((prevPolygons) => {
@@ -115,8 +119,6 @@ export const Home = () => {
       setFocusedId(null);  // Hiçbir poligonun içinde değilse odak iptal edilir
     }
   };
-
-
 
   const deleteFocusedPolygon = () => {
     if (focusedId !== null) {
@@ -341,19 +343,25 @@ export const Home = () => {
           onClick={handleClick}
         >
           <Camera
+            typeNo={typeNo}
+            progNo={progNo}
             polygons={polygons}
             focusedId={focusedId}
             onPolygonUpdate={handlePolygonUpdate}
+            cropMode={cropMode}
           />
 
         </div>
         <ControlPanel
+          typeNo={typeNo}
+          progNo={progNo}
           onAdd={addPolygon}
           onDelete={deleteFocusedPolygon}
           onSave={savePolygonsToCSV}
           onCalculate={sendCsvToCalculateRgbi}
           onTeach={TeachTheMeasurement}
           onTypeSave={saveTypePolygonsToCSV}
+          onCropModeToggle={() => setCropMode(prev => !prev)} // burada toggle'ı gönderiyorsun
         />
       </div>
       <div className="flex flex-row space-x-4">

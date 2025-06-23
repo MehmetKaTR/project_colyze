@@ -119,3 +119,50 @@ def get_results():
     columns = [col[0] for col in cursor.description]
     result = [dict(zip(columns, row)) for row in rows]
     return jsonify(result)
+
+
+# =================== TypeImages =====================
+@db_bp.route('/type-rect', methods=['POST'])
+def insert_or_update_type_rect():
+    data = request.json
+    type_no = data['TypeNo']
+    prog_no = data['ProgramNo']
+    rect_x = data['RectX']
+    rect_y = data['RectY']
+    rect_w = data['RectW']
+    rect_h = data['RectH']
+
+    # Önce var mı kontrol et
+    cursor.execute("""
+        SELECT COUNT(*) FROM TypeImages WHERE TypeNo = ? AND ProgramNo = ?
+    """, (type_no, prog_no))
+    exists = cursor.fetchone()[0]
+
+    if exists:
+        # Kayıt varsa güncelle
+        cursor.execute("""
+            UPDATE TypeImages
+            SET RectX = ?, RectY = ?, RectW = ?, RectH = ?
+            WHERE TypeNo = ? AND ProgramNo = ?
+        """, (rect_x, rect_y, rect_w, rect_h, type_no, prog_no))
+        message = 'Crop koordinatları güncellendi'
+    else:
+        # Yoksa yeni kayıt ekle
+        cursor.execute("""
+            INSERT INTO TypeImages (TypeNo, ProgramNo, RectX, RectY, RectW, RectH)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (type_no, prog_no, rect_x, rect_y, rect_w, rect_h))
+        message = 'Crop koordinatları kaydedildi'
+
+    conn.commit()
+    return jsonify({'message': message})
+
+
+
+@db_bp.route('/type-rect', methods=['GET'])
+def get_type_rects():
+    cursor.execute("SELECT * FROM TypeImages")
+    rows = cursor.fetchall()
+    columns = [col[0] for col in cursor.description]
+    result = [dict(zip(columns, row)) for row in rows]
+    return jsonify(result)

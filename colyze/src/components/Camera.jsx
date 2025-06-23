@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import Polygon from './Polygon'; // Polygon bileşeni içeri aktarılmalı
+import Polygon from './Polygon';
+import CropRect from './CropRect';
 
-const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
+const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode }) => {
   const [imageSrc, setImageSrc] = useState('');
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
 
@@ -13,10 +14,11 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
   const dragStart = useRef({ x: 0, y: 0 });
   const lastOffset = useRef({ x: 0, y: 0 });
 
-  // 🔍 Zoom için scale state'i
   const [scale, setScale] = useState(1);
   const MIN_SCALE = 1;
   const MAX_SCALE = 2.5;
+
+  const [cropRect, setCropRect] = useState({ x: 100, y: 100, width: 100, height: 100 });
 
   const handleMouseDown = (e) => {
     if (e.ctrlKey && e.button === 0) {
@@ -53,10 +55,10 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
       lastOffset.current = offset;
     }
   };
-
-  const fetchImage = async () => {
+  
+  const fetchLiveImage = async (typeNo, progNo) => {
     try {
-      const response = await fetch(`http://localhost:5050/live_camera`);
+      const response = await fetch(`http://localhost:5050/live_camera?typeNo=${typeNo}&progNo=${progNo}`);
       const data = await response.json();
       if (data.image) {
         setImageSrc(data.image);
@@ -66,23 +68,52 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
     }
   };
 
+  
+  const fetchImage = async () => {
+    try {
+      const response = await fetch("http://localhost:5050/type-image");
+      const data = await response.json();
+
+      // İlk kaydı al
+      if (data.length > 2 && data[2].ImageBase64) {
+        setImageSrc(data[2].ImageBase64);
+      } else {
+        console.warn("Veritabanında hiç kayıtlı resim bulunamadı.");
+      }
+    } catch (error) {
+      console.error("Access'ten resim alınamadı:", error);
+    }
+  };
+
+
   useEffect(() => {
     if (imageSrc) {
       const img = new Image();
       img.src = imageSrc;
       img.onload = () => {
-        setImageSize({ width: img.width, height: img.height });
+        const w = img.width;
+        const h = img.height;
+        setImageSize(prev => {
+          if (prev.width !== w || prev.height !== h) {
+            return { width: w, height: h };
+          }
+          return prev;
+        });
       };
     }
   }, [imageSrc]);
 
   useEffect(() => {
-    fetchImage();
-    intervalRef.current = setInterval(fetchImage, 500);
-    return () => clearInterval(intervalRef.current);
-  }, []);
+    fetchLiveImage(typeNo, progNo);
 
-  // 🔁 Scroll ile zoom kontrolü
+    intervalRef.current = setInterval(() => {
+      fetchLiveImage(typeNo, progNo);
+    }, 500);
+
+    return () => clearInterval(intervalRef.current);
+  }, [typeNo, progNo]);
+
+
   useEffect(() => {
     const handleWheel = (e) => {
       if (e.ctrlKey) {
@@ -106,6 +137,7 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
       }
     };
   }, []);
+
 
   return (
     <div
@@ -142,17 +174,42 @@ const Camera = ({ polygons, focusedId, onPolygonUpdate }) => {
           />
         )}
 
-        {/* Poligonlar */}
-        {polygons.map((polygon, index) => {
-          const polygonId = isNaN(polygon.id) ? `polygon-${index}` : polygon.id;
-          return (
-            <Polygon
-              key={polygonId}
-              polygon={{ ...polygon, focused: polygon.id === focusedId }}
-              onUpdate={onPolygonUpdate}
+        {/* Polygonlar */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: imageSize.width,
+            height: imageSize.height,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+            pointerEvents: 'auto'
+          }}
+        >
+          {polygons.map((polygon, index) => {
+            const polygonId = isNaN(polygon.id) ? `polygon-${index}` : polygon.id;
+            return (
+              <Polygon
+                key={polygonId}
+                polygon={{ ...polygon, focused: polygon.id === focusedId }}
+                onUpdate={onPolygonUpdate}
+              />
+            );
+          })}
+
+          {cropMode && (
+            <CropRect
+              typeNo={typeNo}
+              progNo={progNo}
+              cropRect={cropRect}
+              setCropRect={setCropRect}
+              imageSrc={imageSrc}
+              scale={scale}
+              setImageSrc={setImageSrc}
             />
-          );
-        })}
+          )}
+        </div>
       </div>
     </div>
   );

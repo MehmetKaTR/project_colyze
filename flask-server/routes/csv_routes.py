@@ -46,3 +46,23 @@ def save_polygons_to_type_csv():
         for row in csv.reader(infile):
             writer.writerow(row)
     return jsonify({"status": "success", "message": f"Saved to {target_path}"})
+
+@csv_bp.route('/load-type-to-polygons', methods=['POST'])
+def load_type_to_polygons():
+    data = request.get_json()
+    type_no = data.get("typeNo")
+    if not type_no:
+        return jsonify({"error": "typeNo is required"}), 400
+
+    source_path = os.path.abspath(f'../colyze/public/documents/types/type_{type_no}/p2.csv')
+    target_path = os.path.abspath('../colyze/public/documents/polygons.csv')
+
+    if not os.path.exists(source_path):
+        return jsonify({"error": f"Source file not found for type {type_no}"}), 404
+
+    with open(source_path, 'r', newline='') as infile, open(target_path, 'w', newline='') as outfile:
+        writer = csv.writer(outfile)
+        for row in csv.reader(infile):
+            writer.writerow(row)
+
+    return jsonify({"status": "success", "message": f"Loaded type {type_no} into polygons.csv"})

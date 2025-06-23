@@ -30,22 +30,41 @@ export const loadPolygonsFromCSV = async (typeNo) => {
   }
 };
 
-// Flask.js
+export const loadTypeToPolygons = async (typeNo) => {
+  try {
+    const response = await fetch('http://localhost:5050/save-polygons-to-type-csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ typeNo }),
+    });
+
+    const result = await response.json();
+    return response.ok;
+  } catch (error) {
+    console.error("Kopyalama hatası:", error.message);
+    return false;
+  }
+};
+
+
+
 export const getTypeProgNO = async () => {
   try {
-    const response = await fetch('http://localhost:5050/get_type', {
+    const response = await fetch('http://localhost:5050/get_type_program', {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
 
-    if (!response.ok) throw new Error('Failed to get type');
+    if (!response.ok) throw new Error('Failed to get type and program');
 
     const data = await response.json();
-    const newTypeNo = data[0]?.type_no;
-
-    return newTypeNo;
+    return {
+      typeNo: data.type_no,
+      progNo: data.program_no
+    };
   } catch (error) {
     console.error('Hata:', error.message);
     return null;
   }
 };
+

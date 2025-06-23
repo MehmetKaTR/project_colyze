@@ -1,16 +1,24 @@
-import { useEffect } from "react";
+import React, { useEffect } from 'react';
 
-export const Navbar = ({ menuOpen, setMenuOpen }) => {
+export const Navbar = ({ menuOpen, setMenuOpen, setActiveTab }) => {
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
   }, [menuOpen]);
+
   return (
     <nav className="fixed top-0 w-full z-40 bg-[rgba(10, 10, 10, 0.8)] backdrop-blur-lg border-b border-white/10 shadow-lg">
       <div className="max-w-5xl mx-auto px-4">
         <div className="flex justify-between items-center h-16">
-          <a href="#home" className="font-mono text-xl font-bold text-white">
-            {" "}
-            <span className="text-blue-500">Colyze</span>{" "}
+          <a
+            href="#auto"
+            className="font-mono text-xl font-bold text-white"
+            onClick={(e) => {
+              e.preventDefault();
+              setActiveTab("auto");
+              setMenuOpen(false);
+            }}
+          >
+            <span className="text-blue-500">Colyze</span>
           </a>
 
           <div
@@ -22,32 +30,48 @@ export const Navbar = ({ menuOpen, setMenuOpen }) => {
 
           <div className="hidden md:flex items-center space-x-8">
             <a
-              href="#home"
-              className="text-blue-500 hove:text-white transition-colors"
+              href="#auto"
+              className="text-blue-500 hover:text-white transition-colors"
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveTab("auto");
+                setMenuOpen(false);
+              }}
             >
-              {" "}
               AUTO
             </a>
             <a
-              href="#about"
-              className="text-blue-500  hove:text-white transition-colors"
+              href="#f1"
+              className="text-blue-500 hover:text-white transition-colors"
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveTab("f1");
+                setMenuOpen(false);
+              }}
             >
-              {" "}
-              F1 PARAMETER{" "}
+              F1 PARAMETER
             </a>
             <a
-              href="#projects"
-              className="text-blue-500  hove:text-white transition-colors"
+              href="#f2"
+              className="text-blue-500 hover:text-white transition-colors"
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveTab("f2");
+                setMenuOpen(false);
+              }}
             >
-              {" "}
-              F2 PARAMETER{" "}
+              F2 PARAMETER
             </a>
             <a
-              href="#contact"
-              className="text-blue-500  hove:text-white transition-colors"
+              href="#report"
+              className="text-blue-500 hover:text-white transition-colors"
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveTab("report");
+                setMenuOpen(false);
+              }}
             >
-              {" "}
-              REPORT{" "}
+              REPORT
             </a>
           </div>
         </div>

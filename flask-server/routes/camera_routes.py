@@ -7,8 +7,7 @@ import base64
 import csv
 
 camera_bp = Blueprint('camera', __name__)
-ic = ctypes.cdll.LoadLibrary(r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\Colyze\flask-server\tisgrabber_x64.dll")
-
+ic = ctypes.cdll.LoadLibrary(r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\Colyze\flask-server\routes\tisgrabber_x64.dll")
 tis.declareFunctions(ic)
 ic.IC_InitLibrary(0)
 
@@ -17,7 +16,7 @@ camera = None
 def start_camera():
     global camera
     if camera is None:
-        camera = ic.IC_LoadDeviceStateFromFile(None, tis.T("device.xml"))
+        camera = ic.IC_LoadDeviceStateFromFile(None, tis.T("./routes/devicef1.xml"))
         if not ic.IC_IsDevValid(camera):
             camera = None
             return False
@@ -79,18 +78,128 @@ def stop_camera_route():
         return jsonify({'status': 'Camera stopped'})
     return jsonify({'error': 'Camera not running'}), 400
 
+
 @camera_bp.route('/live_camera')
 def live_camera():
-    width = request.args.get('width', default=None, type=int)
-    height = request.args.get('height', default=None, type=int)
+    # TypeNo ve ProgNo parametrelerini al
+    type_no = request.args.get('typeNo', type=int)
+    prog_no = request.args.get('progNo', type=int)
+
     frame = get_current_frame()
     if frame is None:
         return jsonify({'error': 'Kameradan görüntü alınamadı'}), 500
-    if width and height:
-        frame = cv2.resize(frame, (width, height))
-    _, buffer = cv2.imencode('.jpg', frame)
+
+    # Access'ten crop koordinatlarını çek
+    import pyodbc
+    db_path = r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\AccessDBS\colyze.accdb"
+    conn_str = (
+        r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
+        fr'DBQ={db_path};'
+    )
+    conn = pyodbc.connect(conn_str)
+    cursor = conn.cursor()
+
+    result = None
+    if type_no is not None and prog_no is not None:
+        try:
+            cursor.execute("""
+                SELECT RectX, RectY, RectW, RectH 
+                FROM TypeImages 
+                WHERE TypeNo = ? AND ProgramNo = ?
+                ORDER BY ID DESC
+            """, (type_no, prog_no))
+            result = cursor.fetchone()
+        except Exception as e:
+            print("DB Hatası:", e)
+
+    conn.close()
+
+    # Eğer eşleşen kayıt varsa crop uygula
+    if result:
+        x, y, w, h = map(int, result)
+        height, width = frame.shape[:2]
+
+        x = max(0, min(x, width - 1))
+        y = max(0, min(y, height - 1))
+        w = max(1, min(w, width - x))
+        h = max(1, min(h, height - y))
+
+        cropped = frame[y:y + h, x:x + w]
+    else:
+        cropped = frame  # Eğer eşleşen kayıt yoksa tüm kareyi gönder
+
+    _, buffer = cv2.imencode('.jpg', cropped)
     img_uri = f"data:image/jpeg;base64,{base64.b64encode(buffer).decode()}"
     return jsonify({'image': img_uri})
+
+
+
+@camera_bp.route('/ic4_xml_save')
+def device_xml_save():
+    hGrabber = ic.IC_ShowDeviceSelectionDialog(None)
+
+    if ic.IC_IsDevValid(hGrabber):
+        ic.IC_SaveDeviceStateToFile(hGrabber, tis.T("./routes/device.xml"))
+        response = {"status": "success", "message": "Ayarlar device.xml olarak kaydedildi."}
+    else:
+        ic.IC_MsgBox(tis.T("No device opened"), tis.T("Simple Live Video"))
+        response = {"status": "error", "message": "Cihaz açık değil veya geçersiz."}
+
+    ic.IC_ReleaseGrabber(hGrabber)
+    return jsonify(response)
+
+@camera_bp.route('/ic4_configure')
+def configure_camera_properties():
+    hGrabber = ic.IC_ShowDeviceSelectionDialog(None)
+
+    if not ic.IC_IsDevValid(hGrabber):
+        ic.IC_ReleaseGrabber(hGrabber)
+        return jsonify({"status": "error", "message": "No device opened."})
+
+    # Exposure Auto bilgisi alınıyor
+    exposureauto = ctypes.c_long()
+    ic.IC_SetPropertySwitch(hGrabber, tis.T("Exposure"), tis.T("Auto"), exposureauto)
+    auto_exposure_value = exposureauto.value
+
+    # Auto kapat, manuel exposure değeri ayarla
+    ic.IC_SetPropertySwitch(hGrabber, tis.T("Exposure"), tis.T("Auto"), 0)
+    ic.IC_SetPropertyAbsoluteValue(hGrabber, tis.T("Exposure"), tis.T("Value"), ctypes.c_float(0.0303))
+
+    # Exposure değerini ve aralığını al
+    expmin = ctypes.c_float()
+    expmax = ctypes.c_float()
+    exposure = ctypes.c_float()
+    ic.IC_GetPropertyAbsoluteValue(hGrabber, tis.T("Exposure"), tis.T("Value"), exposure)
+    ic.IC_GetPropertyAbsoluteValueRange(hGrabber, tis.T("Exposure"), tis.T("Value"), expmin, expmax)
+
+    # Gain bilgisi
+    gainmin = ctypes.c_long()
+    gainmax = ctypes.c_long()
+    gain = ctypes.c_long()
+    ic.IC_GetPropertyValue(hGrabber, tis.T("Gain"), tis.T("Value"), gain)
+    ic.IC_GetPropertyValueRange(hGrabber, tis.T("Gain"), tis.T("Value"), gainmin, gainmax)
+
+    # Focus denemesi
+    focus_result = ic.IC_PropertyOnePush(hGrabber, tis.T("Focus"), tis.T("One Push"))
+    focus_message = "Focus ayarlandı." if focus_result != -4 else "Kamera Focus özelliğini desteklemiyor."
+
+    # ✅ Ayarları XML olarak kaydet (otomatik)
+    xml_path = tis.T("./routes/devicef1.xml")
+    ic.IC_SaveDeviceStateToFile(hGrabber, xml_path)
+
+    ic.IC_ReleaseGrabber(hGrabber)
+
+    return jsonify({
+        "status": "success",
+        "exposure_auto": auto_exposure_value,
+        "exposure": exposure.value,
+        "exposure_range": [expmin.value, expmax.value],
+        "gain": gain.value,
+        "gain_range": [gainmin.value, gainmax.value],
+        "focus_message": focus_message,
+        "xml_saved_to": "./routes/devicef1.xml"
+    })
+
 
 @camera_bp.route('/calculate_rgbi', methods=['POST'])
 def calculate_rgbi():
