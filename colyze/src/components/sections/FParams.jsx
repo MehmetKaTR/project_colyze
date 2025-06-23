@@ -1,33 +1,77 @@
 import { useState, useEffect, useRef } from "react";
 import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
-import {loadPolygonsFromCSV, getTypeProgNO} from "../Flask";
+import { loadPolygonsFromCSV, getTypeProgNO } from "../Flask";
 
 export const FParams = () => {
   const cameraContainerRef = useRef(null);
   const [typeNo, setTypeNo] = useState(null);
   const [progNo, setProgNo] = useState(null);
-  const [prevTypeNo, setPrevTypeNo] = useState(null); 
+  const [prevTypeNo, setPrevTypeNo] = useState(null);
+  const [prevProgNo, setPrevProgNo] = useState(null);
   const [polygons, setPolygons] = useState([]);
   const [focusedId, setFocusedId] = useState(null);
   const [cropMode, setCropMode] = useState(false);
   const [tolerance, setTolerance] = useState(null);
   const [rgbiResults, setRgbiResults] = useState([]);
 
+  // Kamerayı başlatan fonksiyon
+  const startCamera = async () => {
+    try {
+      const res = await fetch("http://localhost:5050/start_camera");
+      const data = await res.json();
+      console.log("Camera start:", data.status || data.error);
+    } catch (err) {
+      console.error("Camera start error:", err);
+    }
+  };
+
+  // Kamerayı durduran fonksiyon
+  const stopCamera = async () => {
+    try {
+      const res = await fetch("http://localhost:5050/stop_camera");
+      const data = await res.json();
+      console.log("Camera stop:", data.status || data.error);
+    } catch (err) {
+      console.error("Camera stop error:", err);
+    }
+  };
+
+  // Son typeNo ve progNo değerlerini ref ile tut (closure sorununu önlemek için)
+  const latestTypeNo = useRef(typeNo);
+  const latestProgNo = useRef(progNo);
+
+  useEffect(() => {
+    latestTypeNo.current = typeNo;
+    latestProgNo.current = progNo;
+  }, [typeNo, progNo]);
+
+  // Backend'den typeNo ve progNo'yu 2 sn'de bir kontrol et
   useEffect(() => {
     const interval = setInterval(async () => {
       const result = await getTypeProgNO();
-      if (result && (result.typeNo !== typeNo || result.progNo !== progNo)) {
+      if (
+        result &&
+        (result.typeNo !== latestTypeNo.current || result.progNo !== latestProgNo.current)
+      ) {
+        // Önce kamerayı durdur
+        await stopCamera();
+
+        // State güncelle
         setTypeNo(result.typeNo);
         setProgNo(result.progNo);
-        console.log("typeNo/progNo değişti:", result.typeNo, result.progNo);
+
+        // Sonra kamerayı tekrar başlat
+        await startCamera();
+
+        console.log("typeNo/progNo değişti, kamera restart edildi:", result.typeNo, result.progNo);
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [typeNo, progNo]);
+  }, []);
 
-  
+  // typeNo değiştiğinde poligonları yükle
   useEffect(() => {
     const init = async () => {
       if (typeNo !== null) {
@@ -41,7 +85,6 @@ export const FParams = () => {
         setPolygons(loaded);
       }
     };
-
     init();
   }, [typeNo]);
   
