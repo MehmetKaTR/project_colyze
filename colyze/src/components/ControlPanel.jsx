@@ -64,7 +64,7 @@ const sendResult = async () => {
 };
 
 
-const ControlPanel = ({ typeNo, progNo, onAdd, onDelete, onSave, onCalculate, onTeach, onTypeSave, onCropModeToggle }) => {
+const ControlPanel = ({ typeNo, progNo, onAdd, onDelete, onSave, onCalculate, onTeach, onCropModeToggle }) => {
   return (
     <>
       <div className="w-[400px] h-[65vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black flex flex-col space-y-4">
@@ -90,7 +90,7 @@ const ControlPanel = ({ typeNo, progNo, onAdd, onDelete, onSave, onCalculate, on
         </div>
 
         <div className="flex flex-row items-strect space-x-4">
-          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={onTypeSave}>
+          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow">
             TYPE SAVE
           </button>
 

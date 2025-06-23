@@ -205,32 +205,39 @@ def configure_camera_properties():
 def calculate_rgbi():
     try:
         data = request.get_json()
-        csv_text = data.get("csv")
+        polygons = data.get("polygons")
         image_data_url = data.get("image")
-        if not csv_text or not image_data_url:
-            return jsonify({"error": "CSV or image data missing"}), 400
+        
+        if not polygons or not image_data_url:
+            return jsonify({"error": "Polygons or image data missing"}), 400
+
+        # Görüntüyü çöz
         header, encoded = image_data_url.split(",", 1)
         image_bytes = base64.b64decode(encoded)
         frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             return jsonify({'error': 'Görüntü verisi çözülemedi'}), 500
+
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = rgb_frame.shape
         results = []
-        reader = csv.reader(csv_text.strip().split('\n'))
-        for row in reader:
-            if len(row) < 3:
+
+        # Poligonlar üzerinden dön
+        for poly in polygons:
+            poly_id = poly.get("id")
+            points = poly.get("points")
+            if not points:
                 continue
-            poly_id = int(row[0])
-            coords = [float(x) for x in row[1:]]
-            points = [(int(coords[i]), int(coords[i + 1])) for i in range(0, len(coords), 2)]
+            coords = [(int(p["x"]), int(p["y"])) for p in points]
             mask = np.zeros((height, width), dtype=np.uint8)
-            cv2.fillPoly(mask, [np.array(points)], 255)
+            cv2.fillPoly(mask, [np.array(coords)], 255)
             masked = cv2.bitwise_and(rgb_frame, rgb_frame, mask=mask)
+
             r_vals = masked[:, :, 0][mask == 255]
             g_vals = masked[:, :, 1][mask == 255]
             b_vals = masked[:, :, 2][mask == 255]
             if r_vals.size == 0: continue
+
             results.append({
                 'id': poly_id,
                 'avg_r': round(np.mean(r_vals), 1),
@@ -238,6 +245,10 @@ def calculate_rgbi():
                 'avg_b': round(np.mean(b_vals), 1),
                 'intensity': round((np.mean(r_vals) + np.mean(g_vals) + np.mean(b_vals)) / 3, 1)
             })
+
         return jsonify(results)
     except Exception as e:
+        import traceback
+        print("🔴 calculate_rgbi HATASI:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+

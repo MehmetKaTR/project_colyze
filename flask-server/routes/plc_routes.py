@@ -6,6 +6,6 @@ plc_bp = Blueprint('plc', __name__)
 def get_type_and_program():
     return jsonify({
         'type_no': 1,
-        'program_no': 2
+        'program_no': 1
     })
 

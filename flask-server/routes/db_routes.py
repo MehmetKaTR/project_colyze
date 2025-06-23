@@ -121,6 +121,59 @@ def get_results():
     return jsonify(result)
 
 
+@db_bp.route('/tools_by_typeprog', methods=['GET'])
+def get_tools_by_typeprog():
+    type_no = request.args.get('typeNo', type=int)
+    prog_no = request.args.get('progNo', type=int)
+
+    if type_no is None or prog_no is None:
+        return jsonify({'error': 'Eksik parametre'}), 400
+
+    cursor.execute("""
+        SELECT ToolNo, CornerNo, X, Y 
+        FROM ToolsF1 
+        WHERE TypeNo = ? AND ProgNo = ?
+        ORDER BY ToolNo, CornerNo
+    """, (type_no, prog_no))
+
+    rows = cursor.fetchall()
+    tools = {}
+
+    for tool_no, corner_no, x, y in rows:
+        if tool_no not in tools:
+            tools[tool_no] = []
+        tools[tool_no].append({'x': x, 'y': y})
+
+    result = [{'id': tool_no, 'points': points} for tool_no, points in tools.items()]
+    return jsonify(result)
+
+@db_bp.route('/update-polygons', methods=['POST'])
+def update_polygons():
+    data = request.get_json()
+    type_no = data.get("typeNo")
+    prog_no = data.get("progNo")
+    polygons = data.get("polygons", [])
+
+    try:
+        for poly in polygons:
+            tool_no = poly["id"]
+            for idx, point in enumerate(poly["points"]):
+                corner_no = idx + 1  # CornerNo 1'den başlar
+                x = int(point["x"])
+                y = int(point["y"])
+                cursor.execute("""
+                    UPDATE ToolsF1
+                    SET X = ?, Y = ?
+                    WHERE TypeNo = ? AND ProgNo = ? AND ToolNo = ? AND CornerNo = ?
+                """, (x, y, type_no, prog_no, tool_no, corner_no))
+
+        conn.commit()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # =================== TypeImages =====================
 @db_bp.route('/type-rect', methods=['POST'])
 def insert_or_update_type_rect():

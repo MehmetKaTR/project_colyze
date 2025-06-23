@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
-import { loadPolygonsFromCSV, getTypeProgNO } from "../Flask";
+import { getTypeProgNO, loadPolygonsFromDB } from "../Flask";
 
 export const FParams = () => {
   const cameraContainerRef = useRef(null);
@@ -71,22 +71,24 @@ export const FParams = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // typeNo değiştiğinde poligonları yükle
-  useEffect(() => {
-    const init = async () => {
-      if (typeNo !== null) {
-        let loaded;
-        if (typeNo !== prevTypeNo) {
-          loaded = await loadPolygonsFromCSV(typeNo);
-          setPrevTypeNo(typeNo);
-        } else {
-          loaded = await loadPolygonsFromCSV("polygons");
-        }
-        setPolygons(loaded);
+useEffect(() => {
+  const init = async () => {
+    if (typeNo !== null && progNo !== null) {
+      let loaded;
+      if (typeNo !== prevTypeNo || progNo !== prevProgNo) {
+        loaded = await loadPolygonsFromDB(typeNo, progNo);
+        setPrevTypeNo(typeNo);
+        setPrevProgNo(progNo);
+      } else {
+        loaded = await loadPolygonsFromDB(typeNo, progNo); // Aynıysa yine DB'den çek
       }
-    };
-    init();
-  }, [typeNo]);
+      setPolygons(loaded);
+    }
+  };
+  init();
+}, [typeNo, progNo]);
+
+  
   
 
   const addPolygon = () => {
@@ -170,104 +172,85 @@ export const FParams = () => {
     }
   };
 
-  const savePolygonsToCSV = async () => {
+  const savePolygonsToDB = async () => {
     try {
-      const container = document.getElementById("camera-container");
-
-
       const payload = {
-        width: 1920,
-        height: 1080,
-        polygons: polygons
+        typeNo,
+        progNo,
+        polygons
       };
-      console.log("Payload being sent:", payload);
 
-      const response = await fetch('http://localhost:5050/save-polygons', {
+      const response = await fetch('http://localhost:5050/update-polygons', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error('Failed to save');
+      if (!response.ok) throw new Error('DB update failed');
 
-      alert("Polygons saved successfully!");
+      alert("Polygons updated in database!");
     } catch (error) {
-      console.error("Error saving polygons:", error);
-      alert("Error saving polygons!");
-    }
-  };
-
-  const saveTypePolygonsToCSV = async () => {
-    try {
-      const response = await fetch('http://localhost:5050/save-polygons-to-type-csv', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          typeNo: typeNo,  // typeNo'yu buraya ekliyoruz
-          polygons: polygons
-        }),
-      });
-  
-      if (!response.ok) throw new Error('Failed to save');
-  
-      alert("Polygons saved successfully!");
-    } catch (error) {
-      console.error("Error saving polygons:", error);
-      alert("Error saving polygons!");
+      console.error("Error updating polygons in DB:", error);
+      alert("Failed to update database.");
     }
   };
   
-  const sendCsvToCalculateRgbi = async () => {
-    try {
-      const response = await fetch('colyze/documents/polygons.csv');
-      const csvText = await response.text();
-
-      const imageElement = document.getElementById("camera-frame");
-      if (!imageElement) {
-        alert("Kamera görüntüsü bulunamadı.");
-        return;
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = imageElement.width;
-      canvas.height = imageElement.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
-      const imageDataUrl = canvas.toDataURL('image/jpeg');
-
-      const result = await fetch('http://localhost:5050/calculate_rgbi', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csv: csvText, image: imageDataUrl }),
-      });
-
-      const json = await result.json();
-
-      // Tolerans kontrolü yap
-      const checkedResults = json.map(tool => {
-        const tol = tolerance?.find(t => t.id === tool.id);
-
-        if (!tol) {
-          // Eğer tolerans yoksa NOK yap
-          return { ...tool, status: "NOK" };
-        }
-
-        const isOk =
-          tool.avg_r >= tol.min_r && tool.avg_r <= tol.max_r &&
-          tool.avg_g >= tol.min_g && tool.avg_g <= tol.max_g &&
-          tool.avg_b >= tol.min_b && tool.avg_b <= tol.max_b &&
-          tool.intensity >= tol.min_i && tool.intensity <= tol.max_i;
-
-        return { ...tool, status: isOk ? "OK" : "NOK" };
-      });
-
-      setRgbiResults(checkedResults);
-      alert("Measurement complete.");
-    } catch (err) {
-      console.error("Failed to calculate RGBI:", err);
-      alert("Measurement failed.");
+const sendPolygonsToCalculateRgbi = async () => {
+  try {
+    if (typeNo == null || progNo == null) {
+      alert("TypeNo veya ProgNo tanımlı değil!");
+      return;
     }
-  };
+
+    const imageElement = document.getElementById("camera-frame");
+    if (!imageElement) {
+      alert("Kamera görüntüsü bulunamadı.");
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = imageElement.width;
+    canvas.height = imageElement.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+    const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+    const polyRes = await fetch(`http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`);
+    if (!polyRes.ok) {
+      alert("Poligonlar çekilemedi.");
+      return;
+    }
+    const polygons = await polyRes.json();
+
+    const result = await fetch('http://localhost:5050/calculate_rgbi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ polygons, image: imageDataUrl }),
+    });
+
+    const json = await result.json();
+
+    const checkedResults = json.map(tool => {
+      const tol = tolerance?.find(t => t.id === tool.id);
+      if (!tol) return { ...tool, status: "NOK" };
+
+      const isOk =
+        tool.avg_r >= tol.min_r && tool.avg_r <= tol.max_r &&
+        tool.avg_g >= tol.min_g && tool.avg_g <= tol.max_g &&
+        tool.avg_b >= tol.min_b && tool.avg_b <= tol.max_b &&
+        tool.intensity >= tol.min_i && tool.intensity <= tol.max_i;
+
+      return { ...tool, status: isOk ? "OK" : "NOK" };
+    });
+
+    setRgbiResults(checkedResults);
+    alert("Measurement complete.");
+  } catch (err) {
+    console.error("Failed to calculate RGBI:", err);
+    alert("Measurement failed.");
+  }
+};
+
 
   const resetPolygonPosition = (polygonId) => {
     setPolygons((prevPolygons) =>
@@ -303,19 +286,19 @@ export const FParams = () => {
 
   const TeachTheMeasurement = async () => {
     try {
-      const response = await fetch('colyze/documents/polygons.csv');
-      const csvText = await response.text();
-
       const imageElement = document.getElementById("camera-frame");
       if (!imageElement) {
         alert("Kamera görüntüsü bulunamadı.");
         return;
       }
 
+      // TypeNo ve ProgNo'ya göre poligonları Access DB'den al
+      const polyResponse = await fetch(`http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`);
+      const polygonData = await polyResponse.json();
+
       let allResults = [];
 
       for (let i = 0; i < 10; i++) {
-        // Canvas'a çizip base64 al
         const canvas = document.createElement('canvas');
         canvas.width = imageElement.width;
         canvas.height = imageElement.height;
@@ -324,17 +307,17 @@ export const FParams = () => {
         const imageDataUrl = canvas.toDataURL('image/jpeg');
 
         const result = await fetch('http://localhost:5050/calculate_rgbi', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ csv: csvText, image: imageDataUrl }),
-        });
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          polygons: polygonData,
+          image: imageDataUrl
+        }),
+      });
 
         const json = await result.json();
         allResults.push(json);
       }
-
-      // allResults: 10 ölçüm sonucu array'leri, her biri id'lere göre objeler içeriyor.
-      // Şimdi aynı id'ye sahip ölçümlerin ortalamasını alıyoruz.
 
       const averagedResults = allResults[0].map((_, idx) => {
         const id = allResults[0][idx].id;
@@ -354,7 +337,6 @@ export const FParams = () => {
         };
       });
 
-      // Tolerans değerleri oluştur (±20)
       const toleranceValue = 20;
       const toleranceLimits = averagedResults.map(r => ({
         id: r.id,
@@ -375,6 +357,7 @@ export const FParams = () => {
       alert("Teaching failed.");
     }
   };
+
 
   return (
       <section className="min-h-screen pt-20 px-8 pb-8 bg-white text-white">
@@ -400,10 +383,9 @@ export const FParams = () => {
           progNo={progNo}
           onAdd={addPolygon}
           onDelete={deleteFocusedPolygon}
-          onSave={savePolygonsToCSV}
-          onCalculate={sendCsvToCalculateRgbi}
+          onSave={savePolygonsToDB}
+          onCalculate={sendPolygonsToCalculateRgbi}
           onTeach={TeachTheMeasurement}
-          onTypeSave={saveTypePolygonsToCSV}
           onCropModeToggle={() => setCropMode(prev => !prev)} // burada toggle'ı gönderiyorsun
         />
       </div>

@@ -8,7 +8,7 @@
             <item guid="{8E972004-3B94-4AA4-A899-65F6A1432713}" name="Startup Behavior" />
             <item guid="{284C0E06-010B-45BF-8291-09D90A459B28}" name="Brightness">
                 <element guid="{B57D3000-0AC6-4819-A609-272A33140ACA}" name="Value">
-                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E03}" value="0" />
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E03}" value="435" />
                 </element>
             </item>
             <item guid="{284C0E08-010B-45BF-8291-09D90A459B28}" name="Hue">

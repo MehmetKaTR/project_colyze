@@ -68,3 +68,16 @@ export const getTypeProgNO = async () => {
   }
 };
 
+// Flask.jsx
+export const loadPolygonsFromDB = async (typeNo, progNo) => {
+  try {
+    const response = await fetch(`http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Hata oluştu");
+    return data;
+  } catch (error) {
+    console.error("Veritabanından poligonlar alınamadı:", error.message);
+    return [];
+  }
+};
+
