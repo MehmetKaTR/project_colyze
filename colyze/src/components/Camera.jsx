@@ -18,7 +18,7 @@ const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode
   const MIN_SCALE = 1;
   const MAX_SCALE = 2.5;
 
-  const [cropRect, setCropRect] = useState({ x: 100, y: 100, width: 100, height: 100 });
+  const [cropRect, setCropRect] = useState({ x: 100, y: 100, width: 1485, height: 600 });
 
   const handleMouseDown = (e) => {
     if (e.ctrlKey && e.button === 0) {
@@ -56,9 +56,13 @@ const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode
     }
   };
   
-  const fetchLiveImage = async (typeNo, progNo) => {
+  const fetchLiveImage = async (typeNo, progNo, full) => {
     try {
-      const response = await fetch(`http://localhost:5050/live_camera?typeNo=${typeNo}&progNo=${progNo}`);
+      const url = full
+        ? `http://localhost:5050/live_camera?full=true`
+        : `http://localhost:5050/live_camera?typeNo=${typeNo}&progNo=${progNo}`;
+
+      const response = await fetch(url);
       const data = await response.json();
       if (data.image) {
         setImageSrc(data.image);
@@ -67,24 +71,6 @@ const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode
       console.error('Görüntü alınamadı:', error);
     }
   };
-
-  
-  const fetchImage = async () => {
-    try {
-      const response = await fetch("http://localhost:5050/type-image");
-      const data = await response.json();
-
-      // İlk kaydı al
-      if (data.length > 2 && data[2].ImageBase64) {
-        setImageSrc(data[2].ImageBase64);
-      } else {
-        console.warn("Veritabanında hiç kayıtlı resim bulunamadı.");
-      }
-    } catch (error) {
-      console.error("Access'ten resim alınamadı:", error);
-    }
-  };
-
 
   useEffect(() => {
     if (imageSrc) {
@@ -104,15 +90,14 @@ const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode
   }, [imageSrc]);
 
   useEffect(() => {
-    fetchLiveImage(typeNo, progNo);
+    fetchLiveImage(typeNo, progNo, cropMode); // cropMode=false ise full göster
 
     intervalRef.current = setInterval(() => {
-      fetchLiveImage(typeNo, progNo);
+      fetchLiveImage(typeNo, progNo, cropMode);
     }, 500);
 
     return () => clearInterval(intervalRef.current);
-  }, [typeNo, progNo]);
-
+  }, [typeNo, progNo, cropMode]);
 
   useEffect(() => {
     const handleWheel = (e) => {

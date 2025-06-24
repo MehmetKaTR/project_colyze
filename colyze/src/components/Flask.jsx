@@ -30,6 +30,7 @@ export const loadPolygonsFromCSV = async (typeNo) => {
   }
 };
 
+
 export const loadTypeToPolygons = async (typeNo) => {
   try {
     const response = await fetch('http://localhost:5050/save-polygons-to-type-csv', {
@@ -45,7 +46,6 @@ export const loadTypeToPolygons = async (typeNo) => {
     return false;
   }
 };
-
 
 
 export const getTypeProgNO = async () => {
@@ -68,7 +68,7 @@ export const getTypeProgNO = async () => {
   }
 };
 
-// Flask.jsx
+
 export const loadPolygonsFromDB = async (typeNo, progNo) => {
   try {
     const response = await fetch(`http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`);
@@ -80,4 +80,77 @@ export const loadPolygonsFromDB = async (typeNo, progNo) => {
     return [];
   }
 };
+
+
+export const sendPolygonsToCalculateRgbi = async ({typeNo, progNo, tolerance, setRgbiResults, imageDataUrl}) => {
+  try {
+    if (typeNo == null || progNo == null) {
+      alert("TypeNo veya ProgNo tanımlı değil!");
+      return;
+    }
+
+    if (!imageDataUrl) {
+      alert("Görüntü verisi yok.");
+      return;
+    }
+
+    const polyRes = await fetch(`http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`);
+    if (!polyRes.ok) {
+      alert("Poligonlar çekilemedi.");
+      return;
+    }
+    const polygons = await polyRes.json();
+
+    const result = await fetch('http://localhost:5050/calculate_rgbi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ polygons, image: imageDataUrl }),
+    });
+
+    const json = await result.json();
+
+    const checkedResults = json.map(tool => {
+      const tol = tolerance?.find(t => t.id === tool.id);
+      if (!tol) return { ...tool, status: "NOK" };
+
+      const isOk =
+        tool.avg_r >= tol.min_r && tool.avg_r <= tol.max_r &&
+        tool.avg_g >= tol.min_g && tool.avg_g <= tol.max_g &&
+        tool.avg_b >= tol.min_b && tool.avg_b <= tol.max_b &&
+        tool.intensity >= tol.min_i && tool.intensity <= tol.max_i;
+
+      return { ...tool, status: isOk ? "OK" : "NOK" };
+    });
+
+    setRgbiResults(checkedResults);
+    alert("Measurement complete.");
+  } catch (err) {
+    console.error("Failed to calculate RGBI:", err);
+    alert("Measurement failed.");
+  }
+};
+
+// 🔁 Tek bir ölçüm al
+const captureSingleMeasurement = async (imageElement, polygonData) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = imageElement.width;
+  canvas.height = imageElement.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+  const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+  const response = await fetch('http://localhost:5050/calculate_rgbi', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ polygons: polygonData, image: imageDataUrl }),
+  });
+
+  return await response.json();
+};
+
+
+
+// 🧠 Ana teach fonksiyonu
+
+
 

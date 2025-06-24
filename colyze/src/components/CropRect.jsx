@@ -1,81 +1,35 @@
 import { Rnd } from 'react-rnd';
 
 const CropRect = ({ typeNo, progNo, cropRect, setCropRect, imageSrc, scale, setImageSrc }) => {
-    {/*
     const handleCrop = async () => {
-    const canvas = document.createElement('canvas');
-    const img = document.getElementById('camera-frame');
-    if (!img) return;
+        if (!cropRect) return;
 
-    const scaledX = cropRect.x / scale;
-    const scaledY = cropRect.y / scale;
-    const scaledWidth = cropRect.width / scale;
-    const scaledHeight = cropRect.height / scale;
+        // Ölçeklenmiş koordinatları gerçek görüntüye göre hesapla
+        const rectX = cropRect.x / scale;
+        const rectY = cropRect.y / scale;
+        const rectW = cropRect.width / scale;
+        const rectH = cropRect.height / scale;
 
-    canvas.width = scaledWidth;
-    canvas.height = scaledHeight;
-
-    const ctx = canvas.getContext('2d');
-    const tempImg = new Image();
-    tempImg.src = imageSrc;
-    tempImg.onload = async () => {
-        ctx.drawImage(
-        tempImg,
-        scaledX,
-        scaledY,
-        scaledWidth,
-        scaledHeight,
-        0,
-        0,
-        scaledWidth,
-        scaledHeight
-        );
-
-        const croppedData = canvas.toDataURL('image/png');
-        setImageSrc(croppedData);
-
-        // Access'e gönder
-        await fetch("http://localhost:5050/type-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            TypeNo: 1,
-            ProgramNo: 1,
-            ImageBase64: croppedData
-        })
-        });
+        // Backend'e crop koordinatlarını gönder
+        try {
+            const response = await fetch("http://localhost:5050/type-rect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                TypeNo: typeNo,       // Gerekirse dinamik yapabilirsin
+                ProgramNo: progNo,       // Gerekirse dinamik yapabilirsin
+                RectX: rectX,
+                RectY: rectY,
+                RectW: rectW,
+                RectH: rectH
+            }),
+            });
+            const result = await response.json();
+            console.log(result.message);
+        } catch (error) {
+            console.error("Crop koordinatları kaydedilemedi:", error);
+        }
     };
-    };
-    */}
-    const handleCrop = async () => {
-  if (!cropRect) return;
-
-  // Ölçeklenmiş koordinatları gerçek görüntüye göre hesapla
-  const rectX = cropRect.x / scale;
-  const rectY = cropRect.y / scale;
-  const rectW = cropRect.width / scale;
-  const rectH = cropRect.height / scale;
-
-  // Backend'e crop koordinatlarını gönder
-  try {
-    const response = await fetch("http://localhost:5050/type-rect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        TypeNo: typeNo,       // Gerekirse dinamik yapabilirsin
-        ProgramNo: progNo,       // Gerekirse dinamik yapabilirsin
-        RectX: rectX,
-        RectY: rectY,
-        RectW: rectW,
-        RectH: rectH
-      }),
-    });
-    const result = await response.json();
-    console.log(result.message);
-  } catch (error) {
-    console.error("Crop koordinatları kaydedilemedi:", error);
-  }
-};
 
   return (
     <>

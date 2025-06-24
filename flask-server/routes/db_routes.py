@@ -150,28 +150,37 @@ def get_tools_by_typeprog():
 @db_bp.route('/update-polygons', methods=['POST'])
 def update_polygons():
     data = request.get_json()
-    type_no = data.get("typeNo")
-    prog_no = data.get("progNo")
-    polygons = data.get("polygons", [])
+    type_no = data['typeNo']
+    prog_no = data['progNo']
+    polygons = data['polygons']
 
-    try:
-        for poly in polygons:
-            tool_no = poly["id"]
-            for idx, point in enumerate(poly["points"]):
-                corner_no = idx + 1  # CornerNo 1'den başlar
-                x = int(point["x"])
-                y = int(point["y"])
-                cursor.execute("""
-                    UPDATE ToolsF1
-                    SET X = ?, Y = ?
-                    WHERE TypeNo = ? AND ProgNo = ? AND ToolNo = ? AND CornerNo = ?
-                """, (x, y, type_no, prog_no, tool_no, corner_no))
+    for polygon in polygons:
+        tool_no = polygon['id']
+        points = polygon['points']
 
-        conn.commit()
-        return jsonify({"status": "success"})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        # Önce eski verileri sil (o tool için cornerlar)
+        cursor.execute("""
+            DELETE FROM ToolsF1
+            WHERE TypeNo = ? AND ProgNo = ? AND ToolNo = ?
+        """, (type_no, prog_no, tool_no))
+
+        # Sonra yeni cornerları sırayla ekle
+        for idx, point in enumerate(points):
+            cursor.execute("""
+                INSERT INTO ToolsF1 (TypeNo, ProgNo, ToolNo, CornerNo, X, Y)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                type_no,
+                prog_no,
+                tool_no,
+                idx + 1,  # CornerNo
+                point['x'],
+                point['y']
+            ))
+
+    conn.commit()
+    return jsonify({"message": "Polygons updated"})
+
 
 
 # =================== TypeImages =====================
@@ -219,3 +228,45 @@ def get_type_rects():
     columns = [col[0] for col in cursor.description]
     result = [dict(zip(columns, row)) for row in rows]
     return jsonify(result)
+
+
+# =================== HistTeach =====================
+@db_bp.route('/save_histogram', methods=['POST'])
+def save_histogram():
+    try:
+        import pyodbc
+        data = request.get_json()
+
+        type_no = data.get("typeNo")
+        prog_no = data.get("progNo")
+        tool_id = data.get("toolId")
+        histogram = data.get("histogram")  # {'r': [...], 'g': [...], 'b': [...]}
+
+        if not all([type_no, prog_no, tool_id, histogram]):
+            return jsonify({"error": "Eksik veri"}), 400
+
+
+        # Önce var mı diye bak, varsa sil
+        cursor.execute("""
+            DELETE FROM HistTeach
+            WHERE type_no=? AND prog_no=? AND tool_id=?
+        """, (type_no, prog_no, tool_id))
+
+        # Sonra yeniden ekle
+        for channel in ['r', 'g', 'b']:
+            for i, val in enumerate(histogram[channel]):
+                cursor.execute("""
+                    INSERT INTO HistTeach (type_no, prog_no, tool_id, channel, bin_index, value)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (type_no, prog_no, tool_id, channel.upper(), i, float(val)))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "OK", "message": "Teach histogram güncellendi"})
+    except Exception as e:
+        import traceback
+        print("🔴 Histogram kayıt hatası:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
