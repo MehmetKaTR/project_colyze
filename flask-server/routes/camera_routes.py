@@ -4,6 +4,7 @@ import tisgrabber as tis
 import cv2
 import numpy as np
 import base64
+import pyodbc
 import csv
 
 camera_bp = Blueprint('camera', __name__)
@@ -423,10 +424,6 @@ def measure_histogram():
 @camera_bp.route('/teach_histogram', methods=['POST'])
 def teach_histogram():
     try:
-        import pyodbc
-        import numpy as np
-        import base64
-        import cv2
 
         data = request.get_json()
         type_no = data.get("typeNo")
@@ -483,17 +480,29 @@ def teach_histogram():
                 count = cursor.fetchone()[0]
 
                 if count == 0:
-                    for bin_idx, val in enumerate(hist_data):
-                        cursor.execute("""
-                            INSERT INTO HistTeach (TypeNo, ProgNo, Tool_ID, Channel, Bin_Index, [Values])
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        """, (type_no, prog_no, poly_id, channel, bin_idx, float(val)))
+                    records = [
+                        (type_no, prog_no, poly_id, channel, bin_idx, float(val))
+                        for bin_idx, val in enumerate(hist_data)
+                    ]
+                    cursor.executemany("""
+                        INSERT INTO HistTeach (TypeNo, ProgNo, Tool_ID, Channel, Bin_Index, [Values])
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, records)
+
                 else:
-                    for bin_idx, val in enumerate(hist_data):
-                        cursor.execute("""
-                            UPDATE HistTeach SET [Values]=?
-                            WHERE TypeNo=? AND ProgNo=? AND Tool_ID=? AND Channel=? AND Bin_Index=?
-                        """, (float(val), type_no, prog_no, poly_id, channel, bin_idx))
+                    cursor.execute("""
+                        DELETE FROM HistTeach WHERE TypeNo=? AND ProgNo=? AND Tool_ID=? AND Channel=?
+                    """, (type_no, prog_no, poly_id, channel))
+
+                    records = [
+                        (type_no, prog_no, poly_id, channel, bin_idx, float(val))
+                        for bin_idx, val in enumerate(hist_data)
+                    ]
+                    cursor.executemany("""
+                        INSERT INTO HistTeach (TypeNo, ProgNo, Tool_ID, Channel, Bin_Index, [Values])
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, records)
+
 
             save_histogram('R', r_hist)
             save_histogram('G', g_hist)

@@ -181,6 +181,33 @@ def update_polygons():
     conn.commit()
     return jsonify({"message": "Polygons updated"})
 
+@db_bp.route('/delete-polygon', methods=['POST'])
+def delete_polygon():
+    try:
+        data = request.get_json()
+        type_no = data['typeNo']
+        prog_no = data['progNo']
+        tool_id = data['toolId']  # frontend'den gelen polygon id'si
+
+        # ToolsF1 tablosundan sil
+        cursor.execute("""
+            DELETE FROM ToolsF1
+            WHERE TypeNo = ? AND ProgNo = ? AND ToolNo = ?
+        """, (type_no, prog_no, tool_id))
+
+        # HistTeach tablosundan sil
+        cursor.execute("""
+            DELETE FROM HistTeach
+            WHERE TypeNo = ? AND ProgNo = ? AND Tool_ID = ?
+        """, (type_no, prog_no, tool_id))
+
+        conn.commit()
+        return jsonify({"message": f"Polygon {tool_id} veritabanından silindi."})
+
+    except Exception as e:
+        import traceback
+        print("🔴 DELETE POLYGON HATASI:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
 
 
 # =================== TypeImages =====================

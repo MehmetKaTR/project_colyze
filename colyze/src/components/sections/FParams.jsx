@@ -153,12 +153,34 @@ export const FParams = () => {
     }
   };
 
-  const deleteFocusedPolygon = () => {
-    if (focusedId !== null) {
+const deleteFocusedPolygon = async () => {
+  if (focusedId !== null) {
+    try {
+      // Backend'e POST isteğiyle silme talebi gönder
+      const response = await fetch('http://localhost:5050/delete-polygon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          toolId: focusedId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Sunucu yanıtı başarısız.");
+      }
+
+      // Frontend'den polygon'u sil
       setPolygons(polygons.filter((p) => p.id !== focusedId));
-      setFocusedId(null);  // Odak kaybolur
+      setFocusedId(null);
+    } catch (err) {
+      console.error("Polygon silinirken hata oluştu:", err);
+      alert("Polygon silinemedi.");
     }
-  };
+  }
+};
+
 
   const savePolygonsToDB = async () => {
     try {
@@ -237,9 +259,9 @@ export const FParams = () => {
     );
   };
 
-  const RGBTeach = async () => {
+  const RGBITeach = async () => {
     const imageElement = document.getElementById("camera-frame");
-    TeachTheMeasurement(typeNo, progNo, imageElement, setTolerance);
+    TeachTheMeasurement(typeNo, progNo, imageElement, setTolerance, polygons);
   }
 
   const fetchPolygonsFromDB = async (typeNo, progNo) => {
@@ -302,20 +324,36 @@ export const FParams = () => {
   }
 };
 
-const TeachTheMeasurement = async (typeNo, progNo, imageElement, setTolerance) => {
+
+const captureSingleMeasurement = async (imageElement, polygonData) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = imageElement.width;
+  canvas.height = imageElement.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+  const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+  const response = await fetch('http://localhost:5050/calculate_rgbi', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ polygons: polygonData, image: imageDataUrl }),
+  });
+
+  return await response.json();
+};
+
+
+const TeachTheMeasurement = async (typeNo, progNo, imageElement, setTolerance, polygons) => {
   try {
     if (!imageElement) {
       alert("Kamera görüntüsü bulunamadı.");
       return;
     }
 
-    const polyResponse = await fetch(`http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`);
-    const polygonData = await polyResponse.json();
-
     let allResults = [];
 
     for (let i = 0; i < 10; i++) {
-      const result = await captureSingleMeasurement(imageElement, polygonData);
+      const result = await captureSingleMeasurement(imageElement, polygons); // state'ten gelen polygonları kullan
       allResults.push(result);
       await new Promise(res => setTimeout(res, 200)); // yeni frame için gecikme
     }
@@ -339,7 +377,7 @@ const TeachTheMeasurement = async (typeNo, progNo, imageElement, setTolerance) =
     });
 
     const toleranceLimits = averagedResults.map(r => {
-      const poly = polygonData.find(p => p.id === r.id);
+      const poly = polygons.find(p => p.id === r.id);  // Güncel polygon listesi
       const tol_r = poly?.r ?? 0;
       const tol_g = poly?.g ?? 0;
       const tol_b = poly?.b ?? 0;
@@ -359,12 +397,14 @@ const TeachTheMeasurement = async (typeNo, progNo, imageElement, setTolerance) =
     });
 
     setTolerance(toleranceLimits);
+    console.log("limits", toleranceLimits);
     alert("Teaching complete. Tolerance values set.");
   } catch (err) {
     console.error("Teach failed:", err);
     alert("Teaching failed.");
   }
 };
+
 
 
   const HistMeasure = async () => {
@@ -449,6 +489,16 @@ const HistTeach = async () => {
   });
 };
 
+const measureFuncs = {
+  rgb: RGBICalculate,
+  hist: HistMeasure,
+};
+
+const teachFuncs = {
+  rgb: RGBITeach,
+  hist: HistTeach,
+};
+
 
   return (
       <section className="min-h-screen pt-20 px-8 pb-8 bg-white text-white">
@@ -475,8 +525,8 @@ const HistTeach = async () => {
           onAdd={addPolygon}
           onDelete={deleteFocusedPolygon}
           onSave={savePolygonsToDB}
-          onCalculate={HistMeasure}
-          onTeach={HistTeach}
+          onCalculate={measureFuncs}
+          onTeach={teachFuncs}
           onCropModeToggle={() => setCropMode(prev => !prev)} // burada toggle'ı gönderiyorsun
         />
       </div>
