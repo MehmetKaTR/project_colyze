@@ -154,17 +154,20 @@ def update_polygons():
     prog_no = data['progNo']
     polygons = data['polygons']
 
+    # 🔥 1. Eski verileri tamamen sil
+    cursor.execute("""
+        DELETE FROM ToolsF1 WHERE TypeNo = ? AND ProgNo = ?
+    """, (type_no, prog_no))
+
+    cursor.execute("""
+        DELETE FROM HistTeach WHERE TypeNo = ? AND ProgNo = ?
+    """, (type_no, prog_no))
+
+    # 🔄 2. Gelen güncel polygon listesini yaz
     for polygon in polygons:
         tool_no = polygon['id']
         points = polygon['points']
 
-        # Önce eski verileri sil (o tool için cornerlar)
-        cursor.execute("""
-            DELETE FROM ToolsF1
-            WHERE TypeNo = ? AND ProgNo = ? AND ToolNo = ?
-        """, (type_no, prog_no, tool_no))
-
-        # Sonra yeni cornerları sırayla ekle
         for idx, point in enumerate(points):
             cursor.execute("""
                 INSERT INTO ToolsF1 (TypeNo, ProgNo, ToolNo, CornerNo, X, Y)
@@ -173,13 +176,14 @@ def update_polygons():
                 type_no,
                 prog_no,
                 tool_no,
-                idx + 1,  # CornerNo
+                idx + 1,
                 point['x'],
                 point['y']
             ))
 
     conn.commit()
     return jsonify({"message": "Polygons updated"})
+
 
 @db_bp.route('/delete-polygon', methods=['POST'])
 def delete_polygon():

@@ -156,31 +156,23 @@ export const FParams = () => {
 const deleteFocusedPolygon = async () => {
   if (focusedId !== null) {
     try {
-      // Backend'e POST isteğiyle silme talebi gönder
-      const response = await fetch('http://localhost:5050/delete-polygon', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          typeNo,
-          progNo,
-          toolId: focusedId
-        })
-      });
+      // Poligonu frontend'de filtrele ve id'leri yeniden sırala
+      const updatedPolygons = polygons
+        .filter(p => p.id !== focusedId)
+        .map((p, index) => ({ ...p, id: index + 1 }));
 
-      if (!response.ok) {
-        throw new Error("Sunucu yanıtı başarısız.");
-      }
-
-      // Frontend'den polygon'u sil
-      setPolygons(polygons.filter((p) => p.id !== focusedId));
+      setPolygons(updatedPolygons);
       setFocusedId(null);
+
+      // Backend'e sadece tüm güncel polygons listesini gönder
+      await savePolygonsToDB(updatedPolygons);
+
     } catch (err) {
       console.error("Polygon silinirken hata oluştu:", err);
       alert("Polygon silinemedi.");
     }
   }
 };
-
 
   const savePolygonsToDB = async () => {
     try {
@@ -198,7 +190,7 @@ const deleteFocusedPolygon = async () => {
 
       if (!response.ok) throw new Error('DB update failed');
 
-      //alert("Polygons updated in database!");
+      alert("Polygons updated in database!");
     } catch (error) {
       console.error("Error updating polygons in DB:", error);
       //alert("Failed to update database.");
