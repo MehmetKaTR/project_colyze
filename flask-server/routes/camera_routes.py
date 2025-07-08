@@ -4,6 +4,9 @@ import tisgrabber as tis
 import cv2
 import numpy as np
 import base64
+from pathlib import Path
+import os
+from datetime import datetime
 import pyodbc
 import csv
 
@@ -78,6 +81,43 @@ def stop_camera_route():
     if stop_camera():
         return jsonify({'status': 'Camera stopped'})
     return jsonify({'error': 'Camera not running'}), 400
+
+@camera_bp.route('/save_frame', methods=['POST'])
+def save_frame():
+    try:
+        data = request.get_json()
+        image_data_url = data.get("image")
+        type_no = data.get("typeNo", "unknown")
+        prog_no = data.get("progNo", "unknown")
+        measure_type = data.get("measureType", "unknown").lower()
+        datetime_str = data.get("datetime")  # 🔥 buradan geliyor
+
+        if not image_data_url:
+            return jsonify({"error": "Image data missing"}), 400
+
+        header, encoded = image_data_url.split(",", 1)
+        image_bytes = base64.b64decode(encoded)
+        frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            return jsonify({'error': 'Invalid image data'}), 400
+
+        temp_dir = Path("temp_frames")
+        temp_dir.mkdir(exist_ok=True)
+
+        if datetime_str:
+            filename = f"{type_no}_{prog_no}_{datetime_str}_{measure_type}.jpg"
+        else:
+            now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
+            filename = f"{type_no}_{prog_no}_{now_str}_{measure_type}.jpg"
+
+        filepath = temp_dir / filename
+        cv2.imwrite(str(filepath), frame)
+
+        return jsonify({"saved": True, "filename": filename})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 
 @camera_bp.route('/live_camera')

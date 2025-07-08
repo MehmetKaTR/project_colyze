@@ -455,3 +455,34 @@ def save_results():
         import traceback
         print("Save_results_hist HATASI:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+    
+
+@db_bp.route("/get_frame_results")
+def get_frame_results():
+    cursor.execute("SELECT * FROM Results ORDER BY DateTime ASC")
+    rows = cursor.fetchall()
+    columns = [col[0] for col in cursor.description]
+
+    result = []
+    for row in rows:
+        row_dict = dict(zip(columns, row))
+
+        # DateTime datetime objesi ise stringe çevir
+        if isinstance(row_dict.get("DateTime"), datetime):
+            row_dict["DateTime"] = row_dict["DateTime"].strftime("%-d.%m.%Y %H:%M:%S.%f")[:-3]
+
+        # Burada tüm bytes tipindeki değerleri stringe çevir
+        for key, value in row_dict.items():
+            if isinstance(value, bytes):
+                try:
+                    row_dict[key] = value.decode("utf-8")  # ya da uygun encoding
+                except Exception:
+                    row_dict[key] = str(value)  # decode olmazsa fallback
+
+        result.append(row_dict)
+
+    conn.commit()
+    return jsonify(result)
+
+
+

@@ -114,12 +114,25 @@ export const sendPolygonsToCalculateRgbi = async ({
       return;
     }
 
-    // Önce teach tolerans verilerini çek
-    const tolerance = await fetchRgbiTeachTolerance(typeNo, progNo);
-    if (!tolerance) {
-      alert("Teach tolerans verisi alınamadı.");
+    // Öncelikle fotoğrafı kaydet
+    const saveResponse = await fetch("http://localhost:5050/save_frame", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        typeNo, 
+        progNo, 
+        measureType: "rgbi",  
+        image: imageDataUrl 
+      }),
+    });
+
+    if (!saveResponse.ok) {
+      alert("Fotoğraf kaydetme başarısız.");
       return;
     }
+
+    const saveData = await saveResponse.json();
+    console.log("Fotoğraf kaydedildi:", saveData.filename);
 
     // Backend'den poligonları al
     const polyRes = await fetch(
@@ -144,6 +157,13 @@ export const sendPolygonsToCalculateRgbi = async ({
     }
 
     const results = await response.json();
+
+    // Teach tolerans verilerini çek
+    const tolerance = await fetchRgbiTeachTolerance(typeNo, progNo);
+    if (!tolerance) {
+      alert("Teach tolerans verisi alınamadı.");
+      return;
+    }
 
     // Gelen sonuçlara tolerans kontrolü uygula
     const checkedResults = results.map((tool) => {
@@ -188,6 +208,7 @@ export const sendPolygonsToCalculateRgbi = async ({
     alert("RGBI hesaplama başarısız.");
   }
 };
+
 
 
 const captureSingleMeasurement = async (imageElement, polygonData) => {

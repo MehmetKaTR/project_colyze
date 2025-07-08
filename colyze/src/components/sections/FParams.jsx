@@ -268,7 +268,7 @@ const deleteFocusedPolygon = async () => {
     return await res.json();
   };
 
-  const sendPolygonsToMeasureHistogram = async ({ typeNo, progNo, polygons, imageElement }) => {
+  const sendPolygonsToMeasureHistogram = async ({ typeNo, progNo, polygons, imageElement, datetimeStr }) => {
     try {
       if (!typeNo || !progNo || !imageElement) {
         alert("Eksik bilgi!");
@@ -292,6 +292,27 @@ const deleteFocusedPolygon = async () => {
       ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
       const imageDataUrl = canvas.toDataURL("image/jpeg");
 
+      // Öncelikle fotoğrafı kaydet
+      const saveResponse = await fetch("http://localhost:5050/save_frame", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          measureType: "hist",
+          datetimeStr,   // burada gönderiyoruz
+          image: imageDataUrl,
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        alert("Fotoğraf kaydetme başarısız.");
+        return;
+      }
+
+      const saveData = await saveResponse.json();
+      console.log("Fotoğraf kaydedildi:", saveData.filename);
+
       // Measure API'ye gönder
       const response = await fetch("http://localhost:5050/measure_histogram", {
         method: "POST",
@@ -301,7 +322,7 @@ const deleteFocusedPolygon = async () => {
           progNo,
           polygons,
           image: imageDataUrl,
-          teachHistograms,  // 👈 artık burada!
+          teachHistograms,
         }),
       });
 
@@ -421,54 +442,60 @@ const deleteFocusedPolygon = async () => {
 
 
   const HistMeasure = async () => {
-    try {
-      const imageElement = document.getElementById("camera-frame");
-      if (!imageElement) {
-        alert("Kamera görüntüsü bulunamadı.");
-        return;
-      }
-      setMeasurementType("HIST");
+  try {
+    // datetime'ı oluştur
+    const now = new Date();
+    const datetimeStr = now.toISOString().replace(/:/g, "-").replace(/\..+/, ""); 
 
-      const polygons = await fetchPolygonsFromDB(typeNo, progNo);
-
-      const result = await sendPolygonsToMeasureHistogram({
-        typeNo,
-        progNo,
-        polygons,
-        imageElement,
-      });
-
-
-      if (!result) {
-        alert("Histogram sonucu alınamadı.");
-        return;
-      }
-
-      setHistogramResults(result);
-
-      // Hepsi OK mi?
-      const isAllOK = result.every(r => r.status === "OK");
-
-      // Backend'e sonucu kaydet
-      await fetch("http://localhost:5050/save_results", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          TypeNo: typeNo,
-          ProgNo: progNo,
-          MeasType: "HIST",
-          Barcode: 123456,
-          ToolCount: polygons.length,
-          Result: isAllOK ? "OK" : "NOK",
-        }),
-      });
-
-      alert("Histogram sonucu kaydedildi.");
-    } catch (error) {
-      console.error("HistMeasure hatası:", error);
-      alert("Histogram ölçüm hatası.");
+    const imageElement = document.getElementById("camera-frame");
+    if (!imageElement) {
+      alert("Kamera görüntüsü bulunamadı.");
+      return;
     }
-  };
+    setMeasurementType("HIST");
+
+    const polygons = await fetchPolygonsFromDB(typeNo, progNo);
+
+    const result = await sendPolygonsToMeasureHistogram({
+      typeNo,
+      progNo,
+      polygons,
+      imageElement,
+      datetimeStr,    // buraya ekle
+    });
+
+    if (!result) {
+      alert("Histogram sonucu alınamadı.");
+      return;
+    }
+
+    setHistogramResults(result);
+
+    // Hepsi OK mi?
+    const isAllOK = result.every(r => r.status === "OK");
+
+    // Backend'e sonucu kaydet
+    await fetch("http://localhost:5050/save_results", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        TypeNo: typeNo,
+        ProgNo: progNo,
+        MeasType: "HIST",
+        Barcode: 123456,
+        ToolCount: polygons.length,
+        Result: isAllOK ? "OK" : "NOK",
+        DateTime: datetimeStr,  // buraya ekle
+      }),
+    });
+
+    alert("Histogram sonucu kaydedildi.");
+  } catch (error) {
+    console.error("HistMeasure hatası:", error);
+    alert("Histogram ölçüm hatası.");
+  }
+};
+
 
 
   const sendPolygonsToTeachHistogram = async ({ typeNo, progNo, polygons, image }) => {

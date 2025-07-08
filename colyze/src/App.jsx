@@ -3,7 +3,7 @@ import { LoadingScreen } from './components/LoadingScreen'
 import { Navbar } from "./components/Navbar";
 import { MobileMenu } from "./components/MobileMenu";
 import { FParams } from "./components/sections/FParams";
-import { About } from "./components/sections/About";
+import { Auto } from "./components/sections/Auto";
 import { Projects } from "./components/sections/Projects";
 import "./index.css"
 import { Contact } from "./components/sections/Contact";
@@ -24,6 +24,7 @@ function App() {
         <Navbar menuOpen={menuOpen} setMenuOpen={setMenuOpen} setActiveTab={setActiveTab} />
         <MobileMenu menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
         
+        {activeTab === "auto" && <Auto />}
         {activeTab === "f1" && <FParams />}
         {/*
         <About />
