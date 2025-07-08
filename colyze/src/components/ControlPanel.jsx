@@ -41,6 +41,38 @@ const ControlPanel = ({
     }
   };
 
+
+  const stopCamera = async () => {
+  try {
+    const response = await fetch('http://localhost:5050/stop_camera');
+    const data = await response.json();
+    console.log(data.status || data.error);
+  } catch (error) {
+    console.error('Kamera durdurulamadı:', error);
+  }
+};
+
+const startCamera = async () => {
+  try {
+    const response = await fetch('http://localhost:5050/start_camera');
+    const data = await response.json();
+    console.log(data.status || data.error);
+  } catch (error) {
+    console.error('Kamera başlatılamadı:', error);
+  }
+};
+
+  const deviceConfigurate = async () => {
+  try {
+    const response = await fetch('http://localhost:5050/ic4_configure');
+    const data = await response.json();
+    console.log(data.status || data.error);
+  } catch (error) {
+    console.error('Kamera başlatılamadı:', error);
+  }
+};
+
+
   return (
     <>
       <div className="w-[400px] h-[65vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black flex flex-col space-y-4">

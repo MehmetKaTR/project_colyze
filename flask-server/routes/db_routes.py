@@ -265,7 +265,6 @@ def get_type_rects():
 @db_bp.route('/save_histogram', methods=['POST'])
 def save_histogram():
     try:
-        import pyodbc
         data = request.get_json()
 
         type_no = data.get("typeNo")
@@ -280,24 +279,179 @@ def save_histogram():
         # Önce var mı diye bak, varsa sil
         cursor.execute("""
             DELETE FROM HistTeach
-            WHERE type_no=? AND prog_no=? AND tool_id=?
+            WHERE TypeNo=? AND ProgNo=? AND Tool_ID=?
         """, (type_no, prog_no, tool_id))
 
         # Sonra yeniden ekle
         for channel in ['r', 'g', 'b']:
             for i, val in enumerate(histogram[channel]):
                 cursor.execute("""
-                    INSERT INTO HistTeach (type_no, prog_no, tool_id, channel, bin_index, value)
+                    INSERT INTO HistTeach (TypeNo, ProgNo, Tool_ID, Channel, Bin_Index, [Values])
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (type_no, prog_no, tool_id, channel.upper(), i, float(val)))
 
         conn.commit()
-        cursor.close()
-        conn.close()
-
         return jsonify({"status": "OK", "message": "Teach histogram güncellendi"})
+    
     except Exception as e:
         import traceback
         print("🔴 Histogram kayıt hatası:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
+
+@db_bp.route('/get_histograms')
+def get_histograms():
+    try:
+        type_no = request.args.get("typeNo")
+        prog_no = request.args.get("progNo")
+
+        if not type_no or not prog_no:
+            return jsonify({"error": "Eksik parametre"}), 400
+
+        cursor.execute("""
+            SELECT Tool_ID, Channel, Bin_Index, [Values] 
+            FROM HistTeach
+            WHERE TypeNo=? AND ProgNo=?
+            ORDER BY Tool_ID, Channel, Bin_Index
+        """, (type_no, prog_no))
+
+        data = {}
+        for tool_id, channel, bin_index, value in cursor.fetchall():
+            key = str(tool_id)
+            if key not in data:
+                data[key] = {"r": [0]*256, "g": [0]*256, "b": [0]*256}
+            ch = channel.lower()
+            data[key][ch][int(bin_index)] = float(value)
+
+        response = []
+        for tool_id, hist in data.items():
+            response.append({
+                "toolId": tool_id,
+                "histogram": hist
+            })
+
+        return jsonify(response)
+
+    except Exception as e:
+        import traceback
+        print("🔴 get_histograms HATASI:\n", traceback.format_exc())
+        return jsonify({ "error": str(e) }), 500
+
+
+@db_bp.route('/get_rgbi_teach')
+def get_rgbi_teach():
+    try:
+        type_no = request.args.get("typeNo")
+        prog_no = request.args.get("progNo")
+
+        if not type_no or not prog_no:
+            return jsonify({"error": "Eksik parametre"}), 400
+
+        cursor.execute("""
+            SELECT Tool_ID, R_Min, R_Max, G_Min, G_Max, B_Min, B_Max, I_Min, I_Max
+            FROM RGBITeach
+            WHERE TypeNo=? AND ProgNo=?
+            ORDER BY Tool_ID
+        """, (type_no, prog_no))
+
+        data = []
+        for row in cursor.fetchall():
+            data.append({
+                "toolId": str(row.Tool_ID),
+                "rMin": row.R_Min,
+                "rMax": row.R_Max,
+                "gMin": row.G_Min,
+                "gMax": row.G_Max,
+                "bMin": row.B_Min,
+                "bMax": row.B_Max,
+                "iMin": row.I_Min,
+                "iMax": row.I_Max,
+            })
+
+        return jsonify(data)
+
+    except Exception as e:
+        import traceback
+        print("🔴 get_rgbi_teach HATASI:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+
+@db_bp.route('/save_rgbi', methods=['POST'])
+def save_rgbi():
+    try:
+        data = request.get_json()
+        type_no = data.get("typeNo")
+        prog_no = data.get("progNo")
+        measurements = data.get("measurements")  # Liste: [{id, min_r, max_r, ...}]
+
+        if not all([type_no, prog_no, measurements]):
+            return jsonify({"error": "Eksik veri"}), 400
+
+        for m in measurements:
+            tool_id = m["id"]
+            r_min = float(m["min_r"])
+            r_max = float(m["max_r"])
+            g_min = float(m["min_g"])
+            g_max = float(m["max_g"])
+            b_min = float(m["min_b"])
+            b_max = float(m["max_b"])
+            i_min = float(m["min_i"])
+            i_max = float(m["max_i"])
+
+            # Eski veriyi sil
+            cursor.execute("""
+                DELETE FROM RGBITeach
+                WHERE TypeNo=? AND ProgNo=? AND Tool_ID=?
+            """, (type_no, prog_no, tool_id))
+
+            # Yeni veriyi ekle
+            cursor.execute("""
+                INSERT INTO RGBITeach (TypeNo, ProgNo, Tool_ID,
+                                       R_Min, R_Max,
+                                       G_Min, G_Max,
+                                       B_Min, B_Max,
+                                       I_Min, I_Max)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                type_no, prog_no, tool_id,
+                r_min, r_max,
+                g_min, g_max,
+                b_min, b_max,
+                i_min, i_max
+            ))
+
+        conn.commit()
+        return jsonify({"status": "OK", "message": "RGBI değerleri kaydedildi"})
+
+    except Exception as e:
+        import traceback
+        print("🔴 RGBI kayıt hatası:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+
+
+# =================== SaveResults =====================
+@db_bp.route('/save_results', methods=['POST'])
+def save_results():
+    try:
+        data = request.json
+        type_no = data['TypeNo']
+        prog_no = data['ProgNo']
+        meas_type = data['MeasType']
+        barcode = data['Barcode']
+        tool_count = data['ToolCount']
+        result = data['Result']
+
+        now = datetime.now().strftime('%d.%m.%Y %H:%M:%S.%f')[:-3]  # Access için mikro saniyeyi 3 haneye indir
+        cursor.execute("""
+            INSERT INTO Results ([DateTime], [TypeNo], [ProgNo], [MeasType], [Barcode], [ToolCount], [Result])
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (now, type_no, prog_no, meas_type, barcode, tool_count, result))
+
+        conn.commit()
+        return jsonify({"message": "Sonuç kaydedildi"}), 200
+
+    except Exception as e:
+        import traceback
+        print("Save_results_hist HATASI:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500

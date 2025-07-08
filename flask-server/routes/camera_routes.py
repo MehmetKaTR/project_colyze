@@ -254,86 +254,21 @@ def calculate_rgbi():
         return jsonify({"error": str(e)}), 500
 
 
-@camera_bp.route('/analyze_histogram', methods=['POST'])
-def analyze_histogram():
-    try:
-        data = request.get_json()
-        polygons = data.get("polygons")
-        image_data_url = data.get("image")
-        
-        if not polygons or not image_data_url:
-            return jsonify({"error": "Polygons or image data missing"}), 400
-
-        header, encoded = image_data_url.split(",", 1)
-        image_bytes = base64.b64decode(encoded)
-        frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
-        if frame is None:
-            return jsonify({'error': 'Image decode failed'}), 500
-
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        height, width, _ = rgb_frame.shape
-        results = []
-
-        for poly in polygons:
-            poly_id = poly.get("id")
-            points = poly.get("points")
-            ref_r = np.array(poly.get("ref_r"))
-            ref_g = np.array(poly.get("ref_g"))
-            ref_b = np.array(poly.get("ref_b"))
-
-            if not points or ref_r is None or ref_g is None or ref_b is None:
-                continue
-
-            coords = [(int(p["x"]), int(p["y"])) for p in points]
-            mask = np.zeros((height, width), dtype=np.uint8)
-            cv2.fillPoly(mask, [np.array(coords)], 255)
-            masked = cv2.bitwise_and(rgb_frame, rgb_frame, mask=mask)
-
-            r_hist = cv2.calcHist([masked], [0], mask, [256], [0, 256])
-            g_hist = cv2.calcHist([masked], [1], mask, [256], [0, 256])
-            b_hist = cv2.calcHist([masked], [2], mask, [256], [0, 256])
-
-            r_hist = cv2.normalize(r_hist, r_hist).flatten()
-            g_hist = cv2.normalize(g_hist, g_hist).flatten()
-            b_hist = cv2.normalize(b_hist, b_hist).flatten()
-
-            sim_r = cv2.compareHist(r_hist, ref_r, cv2.HISTCMP_BHATTACHARYYA)
-            sim_g = cv2.compareHist(g_hist, ref_g, cv2.HISTCMP_BHATTACHARYYA)
-            sim_b = cv2.compareHist(b_hist, ref_b, cv2.HISTCMP_BHATTACHARYYA)
-            sim_score = (sim_r + sim_g + sim_b) / 3
-
-            threshold = 0.1
-            status = "OK" if sim_score < threshold else "NOK"
-
-            results.append({
-                "id": poly_id,
-                "status": status
-            })
-
-        return jsonify(results)
-    
-    except Exception as e:
-        import traceback
-        print("🔴 analyze_histogram error:\n", traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
-
-
 @camera_bp.route('/measure_histogram', methods=['POST'])
 def measure_histogram():
     try:
-        import pyodbc
-        import numpy as np
+        import base64, cv2, numpy as np
 
         data = request.get_json()
         type_no = data.get("typeNo")
         prog_no = data.get("progNo")
         polygons = data.get("polygons")
         image_data_url = data.get("image")
+        teach_histograms = data.get("teachHistograms")  
 
-        if not all([type_no, prog_no, polygons, image_data_url]):
+        if not all([type_no, prog_no, polygons, image_data_url, teach_histograms]):
             return jsonify({"error": "Eksik veri"}), 400
 
-        # Görüntüyü çöz
         header, encoded = image_data_url.split(",", 1)
         image_bytes = base64.b64decode(encoded)
         frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
@@ -343,25 +278,17 @@ def measure_histogram():
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = rgb_frame.shape
 
-        # DB bağlantısı
-        # Access veritabanı bağlantısı
-        db_path = r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\AccessDBS\colyze.accdb"  # ← Burayı kendine göre düzelt
-        conn_str = (
-            r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
-            fr'DBQ={db_path};'
-        )
-
-        conn = pyodbc.connect(conn_str)
-        cursor = conn.cursor()
-
-        tolerance_threshold = 0.1  # İstediğin gibi değiştir
+        tolerance_threshold = 0.1
 
         results = []
 
+        teach_dict = {str(item["toolId"]): item["histogram"] for item in teach_histograms}
+
         for poly in polygons:
-            poly_id = poly.get("id")
+            poly_id = str(poly.get("id"))  # Burada str yaptık!
             points = poly.get("points")
-            if not points:
+            if not points or poly_id not in teach_dict:
+                results.append({ "id": poly_id, "status": "NOK", "reason": "Teach verisi yok" })
                 continue
 
             coords = [(int(p["x"]), int(p["y"])) for p in points]
@@ -369,7 +296,6 @@ def measure_histogram():
             cv2.fillPoly(mask, [np.array(coords)], 255)
             masked = cv2.bitwise_and(rgb_frame, rgb_frame, mask=mask)
 
-            # Histogramları çıkar
             r_hist = cv2.calcHist([masked], [0], mask, [256], [0, 256])
             g_hist = cv2.calcHist([masked], [1], mask, [256], [0, 256])
             b_hist = cv2.calcHist([masked], [2], mask, [256], [0, 256])
@@ -378,25 +304,10 @@ def measure_histogram():
             g_hist = cv2.normalize(g_hist, g_hist).flatten()
             b_hist = cv2.normalize(b_hist, b_hist).flatten()
 
-            def get_histogram(channel):
-                cursor.execute("""
-                    SELECT Bin_Index, [Values] FROM HistTeach
-                    WHERE TypeNo=? AND ProgNo=? AND Tool_ID=? AND Channel=?
-                    ORDER BY Bin_Index
-                """, (type_no, prog_no, poly_id, channel))
-                rows = cursor.fetchall()
-                return np.array([float(r[1]) for r in rows]) if rows else None
+            teach_r = np.array(teach_dict[poly_id]["r"])
+            teach_g = np.array(teach_dict[poly_id]["g"])
+            teach_b = np.array(teach_dict[poly_id]["b"])
 
-
-            teach_r = get_histogram('R')
-            teach_g = get_histogram('G')
-            teach_b = get_histogram('B')
-
-            if teach_r is None or teach_g is None or teach_b is None:
-                results.append({ "id": poly_id, "status": "NOK", "reason": "Teach verisi yok" })
-                continue
-
-            # Karşılaştır
             diff_r = np.linalg.norm(r_hist - teach_r)
             diff_g = np.linalg.norm(g_hist - teach_g)
             diff_b = np.linalg.norm(b_hist - teach_b)
@@ -411,8 +322,6 @@ def measure_histogram():
                 "diff_b": round(float(diff_b), 4),
             })
 
-        cursor.close()
-        conn.close()
         return jsonify(results)
 
     except Exception as e:
@@ -421,9 +330,14 @@ def measure_histogram():
         return jsonify({ "error": str(e) }), 500
 
 
+
 @camera_bp.route('/teach_histogram', methods=['POST'])
 def teach_histogram():
     try:
+        import base64
+        import cv2
+        import numpy as np
+        from flask import jsonify, request
 
         data = request.get_json()
         type_no = data.get("typeNo")
@@ -444,14 +358,7 @@ def teach_histogram():
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = rgb_frame.shape
 
-        db_path = r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\AccessDBS\colyze.accdb"  # ← Burayı kendine göre düzelt
-        conn_str = (
-            r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
-            fr'DBQ={db_path};'
-        )
-
-        conn = pyodbc.connect(conn_str)
-        cursor = conn.cursor()
+        results = []
 
         for poly in polygons:
             poly_id = poly.get("id")
@@ -468,53 +375,26 @@ def teach_histogram():
             g_hist = cv2.calcHist([masked], [1], mask, [256], [0, 256])
             b_hist = cv2.calcHist([masked], [2], mask, [256], [0, 256])
 
-            r_hist = cv2.normalize(r_hist, r_hist).flatten()
-            g_hist = cv2.normalize(g_hist, g_hist).flatten()
-            b_hist = cv2.normalize(b_hist, b_hist).flatten()
+            r_hist = cv2.normalize(r_hist, r_hist).flatten().tolist()
+            g_hist = cv2.normalize(g_hist, g_hist).flatten().tolist()
+            b_hist = cv2.normalize(b_hist, b_hist).flatten().tolist()
 
-            def save_histogram(channel, hist_data):
-                cursor.execute("""
-                    SELECT COUNT(*) FROM HistTeach
-                    WHERE TypeNo=? AND ProgNo=? AND Tool_ID=? AND Channel=?
-                """, (type_no, prog_no, poly_id, channel))
-                count = cursor.fetchone()[0]
+            results.append({
+                "toolId": poly_id,
+                "histogram": {
+                    "r": r_hist,
+                    "g": g_hist,
+                    "b": b_hist
+                }
+            })
 
-                if count == 0:
-                    records = [
-                        (type_no, prog_no, poly_id, channel, bin_idx, float(val))
-                        for bin_idx, val in enumerate(hist_data)
-                    ]
-                    cursor.executemany("""
-                        INSERT INTO HistTeach (TypeNo, ProgNo, Tool_ID, Channel, Bin_Index, [Values])
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, records)
-
-                else:
-                    cursor.execute("""
-                        DELETE FROM HistTeach WHERE TypeNo=? AND ProgNo=? AND Tool_ID=? AND Channel=?
-                    """, (type_no, prog_no, poly_id, channel))
-
-                    records = [
-                        (type_no, prog_no, poly_id, channel, bin_idx, float(val))
-                        for bin_idx, val in enumerate(hist_data)
-                    ]
-                    cursor.executemany("""
-                        INSERT INTO HistTeach (TypeNo, ProgNo, Tool_ID, Channel, Bin_Index, [Values])
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, records)
-
-
-            save_histogram('R', r_hist)
-            save_histogram('G', g_hist)
-            save_histogram('B', b_hist)
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({"status": "Teach histograms saved/updated successfully."})
+        return jsonify({
+            "status": "OK",
+            "histograms": results
+        }), 200
 
     except Exception as e:
         import traceback
         print("🔴 teach_histogram HATASI:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+

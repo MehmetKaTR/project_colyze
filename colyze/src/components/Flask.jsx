@@ -82,7 +82,27 @@ export const loadPolygonsFromDB = async (typeNo, progNo) => {
 };
 
 
-export const sendPolygonsToCalculateRgbi = async ({typeNo, progNo, tolerance, setRgbiResults, imageDataUrl}) => {
+const fetchRgbiTeachTolerance = async (typeNo, progNo) => {
+  try {
+    const res = await fetch(`http://localhost:5050/get_rgbi_teach?typeNo=${typeNo}&progNo=${progNo}`);
+    if (!res.ok) {
+      alert("RGBI teach verisi çekilemedi.");
+      return null;
+    }
+    const data = await res.json();
+    return data; // [{toolId, rMin, rMax, gMin, gMax, bMin, bMax, iMin, iMax}, ...]
+  } catch (e) {
+    console.error("Teach verisi çekme hatası:", e);
+    return null;
+  }
+};
+
+export const sendPolygonsToCalculateRgbi = async ({
+  typeNo,
+  progNo,
+  setRgbiResults,
+  imageDataUrl,
+}) => {
   try {
     if (typeNo == null || progNo == null) {
       alert("TypeNo veya ProgNo tanımlı değil!");
@@ -94,43 +114,82 @@ export const sendPolygonsToCalculateRgbi = async ({typeNo, progNo, tolerance, se
       return;
     }
 
-    const polyRes = await fetch(`http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`);
+    // Önce teach tolerans verilerini çek
+    const tolerance = await fetchRgbiTeachTolerance(typeNo, progNo);
+    if (!tolerance) {
+      alert("Teach tolerans verisi alınamadı.");
+      return;
+    }
+
+    // Backend'den poligonları al
+    const polyRes = await fetch(
+      `http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`
+    );
     if (!polyRes.ok) {
       alert("Poligonlar çekilemedi.");
       return;
     }
     const polygons = await polyRes.json();
 
-    const result = await fetch('http://localhost:5050/calculate_rgbi', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    // Poligonlar ve görüntüyle RGBI hesaplat
+    const response = await fetch("http://localhost:5050/calculate_rgbi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ polygons, image: imageDataUrl }),
     });
 
-    const json = await result.json();
+    if (!response.ok) {
+      alert("RGBI hesaplama başarısız.");
+      return;
+    }
 
-    const checkedResults = json.map(tool => {
-      const tol = tolerance?.find(t => t.id === tool.id);
+    const results = await response.json();
+
+    // Gelen sonuçlara tolerans kontrolü uygula
+    const checkedResults = results.map((tool) => {
+      const tol = tolerance.find((t) => t.toolId === tool.id.toString());
       if (!tol) return { ...tool, status: "NOK" };
 
       const isOk =
-        tool.avg_r >= tol.min_r && tool.avg_r <= tol.max_r &&
-        tool.avg_g >= tol.min_g && tool.avg_g <= tol.max_g &&
-        tool.avg_b >= tol.min_b && tool.avg_b <= tol.max_b &&
-        tool.intensity >= tol.min_i && tool.intensity <= tol.max_i;
+        tool.avg_r >= tol.rMin && tool.avg_r <= tol.rMax &&
+        tool.avg_g >= tol.gMin && tool.avg_g <= tol.gMax &&
+        tool.avg_b >= tol.bMin && tool.avg_b <= tol.bMax &&
+        tool.intensity >= tol.iMin && tool.intensity <= tol.iMax;
 
       return { ...tool, status: isOk ? "OK" : "NOK" };
     });
 
+    // Sonuçları ekrana yansıt
     setRgbiResults(checkedResults);
-    alert("Measurement complete.");
+    console.log("RGBI Ölçüm Sonuçları:", checkedResults);
+
+    // Genel sonucu belirle (hepsi OK mı?)
+    const overallResult = checkedResults.every(t => t.status === "OK") ? "OK" : "NOK";
+    const toolCount = checkedResults.length;
+    const barcode = "1"; // Sabit barcode değeri (gerekirse dinamik yapılabilir)
+
+    // Sonucu veritabanına kaydet
+    await fetch("http://localhost:5050/save_results", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        TypeNo: typeNo,
+        ProgNo: progNo,
+        MeasType: "RGBI",
+        Barcode: barcode,
+        ToolCount: toolCount,
+        Result: overallResult,
+      }),
+    });
+
+    alert("RGBI ölçümü tamamlandı ve sonuç kaydedildi.");
   } catch (err) {
-    console.error("Failed to calculate RGBI:", err);
-    alert("Measurement failed.");
+    console.error("RGBI hesaplama hatası:", err);
+    alert("RGBI hesaplama başarısız.");
   }
 };
 
-// 🔁 Tek bir ölçüm al
+
 const captureSingleMeasurement = async (imageElement, polygonData) => {
   const canvas = document.createElement('canvas');
   canvas.width = imageElement.width;
@@ -150,7 +209,25 @@ const captureSingleMeasurement = async (imageElement, polygonData) => {
 
 
 
-// 🧠 Ana teach fonksiyonu
+export const SendHistResultToDB = async () => {
+  try {
+    const response = await fetch('http://localhost:5050/save_results_hist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) throw new Error('Failed to get type and program');
+
+    const data = await response.json();
+    return {
+      typeNo: data.type_no,
+      progNo: data.program_no
+    };
+  } catch (error) {
+    console.error('Hata:', error.message);
+    return null;
+  }
+};
 
 
 

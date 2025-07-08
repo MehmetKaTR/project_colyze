@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
 import ToolParameters from '../ToolParameters';
+import MeasurementResultTable from '../MeasurementResultTable';
 import { getTypeProgNO, loadPolygonsFromDB, sendPolygonsToCalculateRgbi} from "../Flask";
 
 export const FParams = () => {
@@ -14,7 +15,10 @@ export const FParams = () => {
   const [focusedId, setFocusedId] = useState(null);
   const [cropMode, setCropMode] = useState(false);
   const [tolerance, setTolerance] = useState(null);
+  const [measurementType, setMeasurementType] = useState(null);
   const [rgbiResults, setRgbiResults] = useState([]);
+  const [histogramResults, setHistogramResults] = useState([]);
+
 
   // Kamerayı başlatan fonksiyon
   const startCamera = async () => {
@@ -203,6 +207,8 @@ const deleteFocusedPolygon = async () => {
         alert("Kamera görüntüsü yok");
         return;
       }
+      setMeasurementType("RGBI");
+
       const canvas = document.createElement('canvas');
       canvas.width = imageElement.width;
       canvas.height = imageElement.height;
@@ -263,233 +269,328 @@ const deleteFocusedPolygon = async () => {
   };
 
   const sendPolygonsToMeasureHistogram = async ({ typeNo, progNo, polygons, imageElement }) => {
-  try {
-    if (!typeNo || !progNo) {
-      alert("TypeNo veya ProgNo tanımlı değil!");
-      return;
-    }
+    try {
+      if (!typeNo || !progNo || !imageElement) {
+        alert("Eksik bilgi!");
+        return;
+      }
 
-    if (!imageElement) {
-      alert("Kamera görüntüsü bulunamadı.");
-      return;
-    }
+      // Teach histogramları al
+      const teachHistogramsResp = await fetch(`http://localhost:5050/get_histograms?typeNo=${typeNo}&progNo=${progNo}`);
+      const teachHistograms = await teachHistogramsResp.json(); // [{toolId, histogram:{r,g,b}}]
 
-    // Canvas oluşturup görüntüyü base64 formatına çevir
-    const canvas = document.createElement("canvas");
+      if (!teachHistograms || teachHistograms.length === 0) {
+        alert("Teach histogram verisi alınamadı.");
+        return;
+      }
+
+      // Görüntüyü al
+      const canvas = document.createElement("canvas");
+      canvas.width = imageElement.width;
+      canvas.height = imageElement.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+      const imageDataUrl = canvas.toDataURL("image/jpeg");
+
+      // Measure API'ye gönder
+      const response = await fetch("http://localhost:5050/measure_histogram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          polygons,
+          image: imageDataUrl,
+          teachHistograms,  // 👈 artık burada!
+        }),
+      });
+
+      if (!response.ok) {
+        alert("Ölçüm yapılamadı.");
+        return;
+      }
+
+      const result = await response.json();
+      console.log("Measure Histogram Results:", result);
+      return result;
+
+    } catch (err) {
+      console.error("Measurement failed:", err);
+      alert("Histogram ölçüm hatası.");
+    }
+  };
+
+
+  const captureSingleMeasurement = async (imageElement, polygonData) => {
+    const canvas = document.createElement('canvas');
     canvas.width = imageElement.width;
     canvas.height = imageElement.height;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext('2d');
     ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
-    const imageDataUrl = canvas.toDataURL("image/jpeg");
+    const imageDataUrl = canvas.toDataURL('image/jpeg');
 
-    // POST isteği gönder
-    const response = await fetch("http://localhost:5050/measure_histogram", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        typeNo,
-        progNo,
-        polygons,
-        image: imageDataUrl,
-      }),
+    const response = await fetch('http://localhost:5050/calculate_rgbi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ polygons: polygonData, image: imageDataUrl }),
     });
 
-    if (!response.ok) {
-      alert("Ölçüm yapılamadı.");
-      return;
-    }
-
-    const result = await response.json();
-
-    // Sonuçları işleyebilir veya state'e set edebilirsin
-    console.log("Measure Histogram Results:", result);
-
-    // Örneğin statusa göre kullanıcıya bilgi verebilirsin:
-    result.forEach(({ id, status, diff_r, diff_g, diff_b }) => {
-      console.log(`Tool ${id} durumu: ${status} (R:${diff_r}, G:${diff_g}, B:${diff_b})`);
-    });
-
-    return result;
-  } catch (error) {
-    console.error("Histogram measurement failed:", error);
-    alert("Histogram measurement failed.");
-  }
-};
+    return await response.json();
+  };
 
 
-const captureSingleMeasurement = async (imageElement, polygonData) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = imageElement.width;
-  canvas.height = imageElement.height;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
-  const imageDataUrl = canvas.toDataURL('image/jpeg');
-
-  const response = await fetch('http://localhost:5050/calculate_rgbi', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ polygons: polygonData, image: imageDataUrl }),
-  });
-
-  return await response.json();
-};
-
-
-const TeachTheMeasurement = async (typeNo, progNo, imageElement, setTolerance, polygons) => {
-  try {
-    if (!imageElement) {
-      alert("Kamera görüntüsü bulunamadı.");
-      return;
-    }
-
-    let allResults = [];
-
-    for (let i = 0; i < 10; i++) {
-      const result = await captureSingleMeasurement(imageElement, polygons); // state'ten gelen polygonları kullan
-      allResults.push(result);
-      await new Promise(res => setTimeout(res, 200)); // yeni frame için gecikme
-    }
-
-    const averagedResults = allResults[0].map((_, idx) => {
-      const id = allResults[0][idx].id;
-      let sum_r = 0, sum_g = 0, sum_b = 0, sum_i = 0;
-      allResults.forEach(resultSet => {
-        sum_r += resultSet[idx].avg_r;
-        sum_g += resultSet[idx].avg_g;
-        sum_b += resultSet[idx].avg_b;
-        sum_i += resultSet[idx].intensity;
-      });
-      return {
-        id,
-        avg_r: sum_r / allResults.length,
-        avg_g: sum_g / allResults.length,
-        avg_b: sum_b / allResults.length,
-        intensity: sum_i / allResults.length,
-      };
-    });
-
-    const toleranceLimits = averagedResults.map(r => {
-      const poly = polygons.find(p => p.id === r.id);  // Güncel polygon listesi
-      const tol_r = poly?.r ?? 0;
-      const tol_g = poly?.g ?? 0;
-      const tol_b = poly?.b ?? 0;
-      const tol_i = poly?.i ?? 0;
-
-      return {
-        id: r.id,
-        min_r: r.avg_r - tol_r,
-        max_r: r.avg_r + tol_r,
-        min_g: r.avg_g - tol_g,
-        max_g: r.avg_g + tol_g,
-        min_b: r.avg_b - tol_b,
-        max_b: r.avg_b + tol_b,
-        min_i: r.intensity - tol_i,
-        max_i: r.intensity + tol_i,
-      };
-    });
-
-    setTolerance(toleranceLimits);
-    console.log("limits", toleranceLimits);
-    alert("Teaching complete. Tolerance values set.");
-  } catch (err) {
-    console.error("Teach failed:", err);
-    alert("Teaching failed.");
-  }
-};
-
-
-
-  const HistMeasure = async () => {
-      try {
-      const imageElement = document.getElementById("camera-frame");
+  const TeachTheMeasurement = async (typeNo, progNo, imageElement, setTolerance, polygons) => {
+    try {
       if (!imageElement) {
         alert("Kamera görüntüsü bulunamadı.");
         return;
       }
 
-      // Polygonları backend'den çekelim
+      let allResults = [];
+
+      for (let i = 0; i < 10; i++) {
+        const result = await captureSingleMeasurement(imageElement, polygons);
+        allResults.push(result);
+        await new Promise(res => setTimeout(res, 200));
+      }
+
+      const averagedResults = allResults[0].map((_, idx) => {
+        const id = allResults[0][idx].id;
+        let sum_r = 0, sum_g = 0, sum_b = 0, sum_i = 0;
+        allResults.forEach(resultSet => {
+          sum_r += resultSet[idx].avg_r;
+          sum_g += resultSet[idx].avg_g;
+          sum_b += resultSet[idx].avg_b;
+          sum_i += resultSet[idx].intensity;
+        });
+        return {
+          id,
+          avg_r: sum_r / allResults.length,
+          avg_g: sum_g / allResults.length,
+          avg_b: sum_b / allResults.length,
+          intensity: sum_i / allResults.length,
+        };
+      });
+
+      const toleranceLimits = averagedResults.map(r => {
+        const poly = polygons.find(p => p.id === r.id);
+        const tol_r = poly?.r ?? 0;
+        const tol_g = poly?.g ?? 0;
+        const tol_b = poly?.b ?? 0;
+        const tol_i = poly?.i ?? 0;
+
+        return {
+          id: r.id,
+          min_r: Math.max(0, r.avg_r - tol_r),
+          max_r: Math.min(255, r.avg_r + tol_r),
+          min_g: Math.max(0, r.avg_g - tol_g),
+          max_g: Math.min(255, r.avg_g + tol_g),
+          min_b: Math.max(0, r.avg_b - tol_b),
+          max_b: Math.min(255, r.avg_b + tol_b),
+          min_i: Math.max(0, r.intensity - tol_i),
+          max_i: Math.min(255, r.intensity + tol_i),
+        };
+      });
+
+      setTolerance(toleranceLimits);
+
+      // 🔁 DB'ye kaydet
+      const saveResponse = await fetch("http://localhost:5050/save_rgbi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          measurements: toleranceLimits,
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        const errText = await saveResponse.text();
+        console.error("❌ RGBI kayıt hatası:", errText);
+        alert("RGBI kayıt hatası!");
+      } else {
+        alert("Teaching ve RGBI kayıt işlemi tamamlandı!");
+      }
+
+    } catch (err) {
+      console.error("Teach failed:", err);
+      alert("Teaching failed.");
+    }
+  };
+
+
+  const HistMeasure = async () => {
+    try {
+      const imageElement = document.getElementById("camera-frame");
+      if (!imageElement) {
+        alert("Kamera görüntüsü bulunamadı.");
+        return;
+      }
+      setMeasurementType("HIST");
+
       const polygons = await fetchPolygonsFromDB(typeNo, progNo);
-      
-      const result = await sendPolygonsToMeasureHistogram({ typeNo, progNo, polygons, imageElement });
-      
-      console.log(result);
-    } catch (error) {
-      console.error(error);
-    }
-  }
 
-  const sendPolygonsToTeachHistogram = async ({ typeNo, progNo, polygons, image }) => {
-  try {
-    if (!typeNo || !progNo) {
-      alert("TypeNo veya ProgNo tanımlı değil!");
-      return;
-    }
-
-    if (!image) {
-      alert("Kamera görüntüsü bulunamadı.");
-      return;
-    }
-
-    // Artık burada canvas'a çizme işlemi yok, direkt base64 stringi kullan
-    const response = await fetch("http://localhost:5050/teach_histogram", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      const result = await sendPolygonsToMeasureHistogram({
         typeNo,
         progNo,
         polygons,
-        image,   // base64 stringi direk buraya koyduk
-      }),
-    });
+        imageElement,
+      });
 
-    if (!response.ok) {
-      alert("Teach işlemi başarısız oldu.");
+
+      if (!result) {
+        alert("Histogram sonucu alınamadı.");
+        return;
+      }
+
+      setHistogramResults(result);
+
+      // Hepsi OK mi?
+      const isAllOK = result.every(r => r.status === "OK");
+
+      // Backend'e sonucu kaydet
+      await fetch("http://localhost:5050/save_results", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          TypeNo: typeNo,
+          ProgNo: progNo,
+          MeasType: "HIST",
+          Barcode: 123456,
+          ToolCount: polygons.length,
+          Result: isAllOK ? "OK" : "NOK",
+        }),
+      });
+
+      alert("Histogram sonucu kaydedildi.");
+    } catch (error) {
+      console.error("HistMeasure hatası:", error);
+      alert("Histogram ölçüm hatası.");
+    }
+  };
+
+
+  const sendPolygonsToTeachHistogram = async ({ typeNo, progNo, polygons, image }) => {
+    try {
+      if (!typeNo || !progNo || !image) {
+        alert("Eksik bilgi!");
+        return;
+      }
+
+      const response = await fetch("http://localhost:5050/teach_histogram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ typeNo, progNo, polygons, image }),
+      });
+
+      if (!response.ok) {
+        alert("Teach işlemi başarısız oldu.");
+        return;
+      }
+
+      const result = await response.json();
+      console.log("Teach Histogram Sonucu:", result);
+
+      // Gelen tüm histogramları save_histogram'a yolla
+      for (const item of result.histograms) {
+        const saveResponse = await fetch("http://localhost:5050/save_histogram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            typeNo,
+            progNo,
+            toolId: item.toolId,
+            histogram: item.histogram,
+          }),
+        });
+
+        if (!saveResponse.ok) {
+          console.error("❌ Histogram kaydedilemedi:", await saveResponse.text());
+        }
+      }
+
+      alert("Teach ve kayıt işlemleri başarıyla tamamlandı!");
+
+    } catch (error) {
+      console.error("Teach histogram failed:", error);
+      alert("Teach histogram failed.");
+    }
+  };
+
+
+  const HistTeach = async () => {
+    const imageElement = document.getElementById("camera-frame");
+    if (!imageElement) {
+      alert("Kamera görüntüsü yok");
       return;
     }
+    const canvas = document.createElement('canvas');
+    canvas.width = imageElement.width;
+    canvas.height = imageElement.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+    const imageDataUrl = canvas.toDataURL('image/jpeg');
+    
+    await sendPolygonsToTeachHistogram({
+      typeNo,
+      progNo,
+      polygons,
+      image: imageDataUrl,   // burası artık base64 string
+    });
+  };
 
-    const result = await response.json();
-    console.log("Teach Histogram Sonucu:", result);
-    alert("Teach işlemi başarılı!");
+  const measureFuncs = {
+    rgb: RGBICalculate,
+    hist: HistMeasure,
+  };
 
-    return result;
+  const teachFuncs = {
+    rgb: RGBITeach,
+    hist: HistTeach,
+  };
 
-  } catch (error) {
-    console.error("Teach histogram failed:", error);
-    alert("Teach histogram failed.");
-  }
-};
-
-
-const HistTeach = async () => {
-  const imageElement = document.getElementById("camera-frame");
-  if (!imageElement) {
-    alert("Kamera görüntüsü yok");
-    return;
-  }
-  const canvas = document.createElement('canvas');
-  canvas.width = imageElement.width;
-  canvas.height = imageElement.height;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
-  const imageDataUrl = canvas.toDataURL('image/jpeg');
-  
-  await sendPolygonsToTeachHistogram({
-    typeNo,
-    progNo,
-    polygons,
-    image: imageDataUrl,   // burası artık base64 string
-  });
-};
-
-const measureFuncs = {
-  rgb: RGBICalculate,
-  hist: HistMeasure,
-};
-
-const teachFuncs = {
-  rgb: RGBITeach,
-  hist: HistTeach,
-};
+  const renderMeasurementTable = () => {
+    switch (measurementType) {
+      case "RGBI":
+        return (
+          <MeasurementResultTable
+            title="RGBI RESULTS"
+            columns={["ID", "R", "G", "B", "I", "Status"]}
+            data={rgbiResults.map(r => ({
+              id: r.id,
+              r: r.avg_r,
+              g: r.avg_g,
+              b: r.avg_b,
+              i: r.intensity,
+              status: r.status,
+            }))}
+          />
+        );
+      case "HIST":
+        return (
+          <MeasurementResultTable
+            title="HISTOGRAM RESULTS"
+            columns={["ID", "Diff R", "Diff G", "Diff B", "Status"]}
+            data={histogramResults.map(r => ({
+              id: r.id,
+              "diff r": r.diff_r,
+              "diff g": r.diff_g,
+              "diff b": r.diff_b,
+              status: r.status,
+            }))}
+          />
+        );
+      default:
+        return (
+          <MeasurementResultTable
+            title="MEASUREMENT RESULTS"
+            columns={["ID", "R", "G", "B", "I", "Status"]}
+            data={[]}
+          />
+        );
+    }
+  };
 
 
   return (
@@ -524,59 +625,19 @@ const teachFuncs = {
       </div>
       <div className="flex flex-row space-x-4">
 
-      <div className="w-full h-[30vh] bg-gray-200 rounded-xl shadow-xl text-black relative flex flex-col">
-        <ToolParameters
-          polygons={polygons}
-          setPolygons={setPolygons}
-          focusedId={focusedId}
-          setFocusedId={setFocusedId}
-          resetPolygonPosition={resetPolygonPosition}
-        />
-      </div>
-
-      <div className="w-full h-[30vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
-        <span className="flex justify-center items-center text-black font-bold mb-1">MEASUREMENT RESULTS</span>
-
-        <div className="h-full overflow-auto">
-          {rgbiResults.length === 0 ? (
-            <p className="text-center">No results yet.</p>
-          ) : (
-            <div className="overflow-hidden">
-              <table className="min-w-full text-sm text-center">
-                <thead className="bg-gray-300">
-                  <tr>
-                    <th className="py-2 px-4">ID</th>
-                    <th className="py-2 px-4">R</th>
-                    <th className="py-2 px-4">G</th>
-                    <th className="py-2 px-4">B</th>
-                    <th className="py-2 px-4">I</th>
-                    <th className="py-2 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rgbiResults.map((tool) => (
-                    <tr
-                      key={tool.id}
-                      className={`border-t ${
-                        tool.status === "OK" ? "bg-green-200" : "bg-red-200"
-                      }`}
-                    >
-                      <td className="py-1 px-4">{tool.id}</td>
-                      <td className="py-1 px-4">{tool.avg_r.toFixed(2)}</td>
-                      <td className="py-1 px-4">{tool.avg_g.toFixed(2)}</td>
-                      <td className="py-1 px-4">{tool.avg_b.toFixed(2)}</td>
-                      <td className="py-1 px-4">{tool.intensity.toFixed(2)}</td>
-                      <td className="py-1 px-4 font-bold">{tool.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="w-full h-[30vh] bg-gray-200 rounded-xl shadow-xl text-black relative flex flex-col">
+          <ToolParameters
+            polygons={polygons}
+            setPolygons={setPolygons}
+            focusedId={focusedId}
+            setFocusedId={setFocusedId}
+            resetPolygonPosition={resetPolygonPosition}
+          />
         </div>
 
-    </div>
-  </div>
+        {renderMeasurementTable()}
+
+      </div>
 
     </section>
   );
