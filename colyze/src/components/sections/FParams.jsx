@@ -3,7 +3,7 @@ import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
 import ToolParameters from '../ToolParameters';
 import MeasurementResultTable from '../MeasurementResultTable';
-import { getTypeProgNO, loadPolygonsFromDB, sendPolygonsToCalculateRgbi} from "../Flask";
+import { getTypeProgNO, loadPolygonsFromDB, SaveFrameWithPolygons, sendPolygonsToCalculateRgbi} from "../Flask";
 
 export const FParams = () => {
   const cameraContainerRef = useRef(null);
@@ -92,6 +92,15 @@ export const FParams = () => {
     };
     init();
   }, [typeNo, progNo]);
+
+  const getFormattedDateTime = () => {
+    const now = new Date();
+
+    const pad = (n, z = 2) => String(n).padStart(z, '0');
+
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_` +
+          `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}-${pad(now.getMilliseconds(), 3)}`;
+  };
 
   const addPolygon = () => {
     setPolygons((prevPolygons) => {
@@ -203,27 +212,45 @@ const deleteFocusedPolygon = async () => {
   
   const RGBICalculate = async () => {
     const imageElement = document.getElementById("camera-frame");
-      if (!imageElement) {
-        alert("Kamera görüntüsü yok");
-        return;
-      }
-      setMeasurementType("RGBI");
+    const datetime = getFormattedDateTime();
+    if (!imageElement) {
+      alert("Kamera görüntüsü yok");
+      return;
+    }
 
-      const canvas = document.createElement('canvas');
-      canvas.width = imageElement.width;
-      canvas.height = imageElement.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
-      const imageDataUrl = canvas.toDataURL('image/jpeg');
+    setMeasurementType("RGBI");
 
-      sendPolygonsToCalculateRgbi({
-        typeNo,
-        progNo,
-        tolerance,
-        setRgbiResults,
-        imageDataUrl,
-      });
-  }
+    const canvas = document.createElement('canvas');
+    canvas.width = imageElement.width;
+    canvas.height = imageElement.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+    const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+    const results = await sendPolygonsToCalculateRgbi({
+      typeNo,
+      progNo,
+      tolerance,
+      setRgbiResults, 
+      imageDataUrl,
+      datetime,
+    });
+    console.log(results)
+
+    const updatedPolygons = updatePolygonsWithStatus(polygons, results);
+    setPolygons(updatedPolygons)
+
+    SaveFrameWithPolygons(typeNo, progNo, updatedPolygons, imageDataUrl, datetime);
+  };
+
+  const updatePolygonsWithStatus = (polygons, rgbiResults) => {
+    return polygons.map(polygon => {
+      const matchedResult = rgbiResults.find(r => r.id === polygon.id);
+      return matchedResult
+        ? { ...polygon, status: matchedResult.status }
+        : { ...polygon, status: "empty" }; 
+    });
+  };
 
   const resetPolygonPosition = (polygonId) => {
     setPolygons((prevPolygons) =>

@@ -102,6 +102,7 @@ export const sendPolygonsToCalculateRgbi = async ({
   progNo,
   setRgbiResults,
   imageDataUrl,
+  datetime
 }) => {
   try {
     if (typeNo == null || progNo == null) {
@@ -122,7 +123,8 @@ export const sendPolygonsToCalculateRgbi = async ({
         typeNo, 
         progNo, 
         measureType: "rgbi",  
-        image: imageDataUrl 
+        image: imageDataUrl,
+        datetime: datetime 
       }),
     });
 
@@ -199,13 +201,16 @@ export const sendPolygonsToCalculateRgbi = async ({
         Barcode: barcode,
         ToolCount: toolCount,
         Result: overallResult,
+        DateTime: datetime
       }),
     });
 
     alert("RGBI ölçümü tamamlandı ve sonuç kaydedildi.");
+    return checkedResults
   } catch (err) {
     console.error("RGBI hesaplama hatası:", err);
     alert("RGBI hesaplama başarısız.");
+    return []
   }
 };
 
@@ -229,7 +234,6 @@ const captureSingleMeasurement = async (imageElement, polygonData) => {
 };
 
 
-
 export const SendHistResultToDB = async () => {
   try {
     const response = await fetch('http://localhost:5050/save_results_hist', {
@@ -251,4 +255,43 @@ export const SendHistResultToDB = async () => {
 };
 
 
+export const SaveFrameWithPolygons = async (typeNo, progNo, polygons, imageDataUrl, datetime) => {
+  try {
+      if (typeNo == null || progNo == null) {
+        alert("TypeNo veya ProgNo tanımlı değil!");
+        return;
+      }
 
+      if (!imageDataUrl) {
+        alert("Görüntü verisi yok.");
+        return;
+      }
+
+      // Öncelikle fotoğrafı kaydet
+      const saveResponse = await fetch("http://localhost:5050/save_frame_with_polygons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          typeNo, 
+          progNo, 
+          measureType: "rgbi",  
+          image: imageDataUrl,
+          datetime: datetime,
+          polygons: polygons 
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        alert("Fotoğraf kaydetme başarısız.");
+        return;
+      }
+
+      const saveData = await saveResponse.json();
+      console.log("Fotoğraf kaydedildi:", saveData.filename);
+
+  }
+  catch (err) {
+      console.error("RGBI hesaplama hatası:", err);
+      alert("RGBI hesaplama başarısız.");
+  }
+};

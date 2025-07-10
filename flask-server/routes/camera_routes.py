@@ -90,7 +90,8 @@ def save_frame():
         type_no = data.get("typeNo", "unknown")
         prog_no = data.get("progNo", "unknown")
         measure_type = data.get("measureType", "unknown").lower()
-        datetime_str = data.get("datetime")  # 🔥 buradan geliyor
+        datetime_str = data.get("datetime")  
+        print("HABURDA",datetime_str)
 
         if not image_data_url:
             return jsonify({"error": "Image data missing"}), 400
@@ -118,6 +119,103 @@ def save_frame():
         return jsonify({"error": str(e)}), 500
 
 
+@camera_bp.route('/save_frame_with_polygons', methods=['POST'])
+def save_frame_with_polygons():
+    try:
+        data = request.get_json()
+        image_data_url = data.get("image")
+        type_no = data.get("typeNo", "unknown")
+        prog_no = data.get("progNo", "unknown")
+        measure_type = data.get("measureType", "unknown").lower()
+        datetime_str = data.get("datetime")  
+        polygons = data.get("polygons", [])
+
+        print(polygons)
+        print("Tarih:", datetime_str)
+        print("Poligon sayısı:", len(polygons))
+
+        if not image_data_url:
+            return jsonify({"error": "Image data missing"}), 400
+
+        # Görüntüyü base64'ten çöz
+        header, encoded = image_data_url.split(",", 1)
+        image_bytes = base64.b64decode(encoded)
+        frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            return jsonify({'error': 'Invalid image data'}), 400
+
+        # Üzerine çizim için overlay (alpha karışımı için)
+        overlay = frame.copy()
+
+        for polygon in polygons:
+            points = polygon.get("points", [])
+            status = polygon.get("status", "").upper()
+
+            if len(points) < 3:
+                continue
+
+            pts = np.array([[int(p['x']), int(p['y'])] for p in points], np.int32).reshape((-1, 1, 2))
+
+            # Renk ve alpha belirle
+            if status == "OK":
+                fill_color = (69, 230, 16)  # BGR (Yeşil parlak)
+                alpha = 0.4
+            elif status == "NOK":
+                fill_color = (36, 36, 192)  # BGR (Kırmızı parlak)
+                alpha = 0.86
+            else:
+                fill_color = None
+                alpha = 0.0
+
+            # Beyaz sınır çiz (her durumda)
+            cv2.polylines(frame, [pts], isClosed=True, color=(255, 255, 255), thickness=2)
+
+            # İçini doldur (alpha ile)
+            if fill_color and alpha > 0:
+                cv2.fillPoly(overlay, [pts], fill_color)
+
+            # Polygon ortasını hesapla (yazı için)
+            M = cv2.moments(pts)
+            if M["m00"] != 0:
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+            else:
+                cX, cY = pts[0][0][0], pts[0][0][1]
+
+            # Polygon ID'sini yaz (beyaz, okunaklı)
+            poly_id = str(polygon.get("id", ""))
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.7
+            thickness = 2
+            text_size, _ = cv2.getTextSize(poly_id, font, font_scale, thickness)
+            text_w, text_h = text_size
+            text_x = cX - text_w // 2
+            text_y = cY + text_h // 2
+
+            cv2.putText(frame, poly_id, (text_x, text_y), font, font_scale, (255, 255, 255), thickness, lineType=cv2.LINE_AA)
+
+        # Alpha blending ile doldurma işlemi
+        cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+
+        # Kaydetme dizini
+        temp_dir = Path("temp_frames")
+        temp_dir.mkdir(exist_ok=True)
+
+        # Dosya ismi
+        if datetime_str:
+            filename = f"{type_no}_{prog_no}_{datetime_str}_{measure_type}.jpg"
+        else:
+            now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
+            filename = f"{type_no}_{prog_no}_{now_str}_{measure_type}.jpg"
+
+        filepath = temp_dir / filename
+        cv2.imwrite(str(filepath), frame)
+
+        return jsonify({"saved": True, "filename": filename})
+    except Exception as e:
+        import traceback
+        print("save_frame HATASI:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
 
 
 @camera_bp.route('/live_camera')

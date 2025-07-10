@@ -1,6 +1,6 @@
 import React from "react";
 
-const FrameGallery = ({ frames = [] }) => {
+const FrameGallery = ({ frames = [], onFrameClick }) => {
   return (
     <div className="bg-white rounded-2xl shadow-lg p-4 flex-1">
       <h2 className="text-lg font-bold mb-2 text-gray-700">Captured Frames</h2>
@@ -8,9 +8,9 @@ const FrameGallery = ({ frames = [] }) => {
         {frames.map((frame, idx) => (
           <div
             key={frame.filename || idx}
-            className="border border-gray-300 rounded-lg p-2 flex flex-col items-center bg-gray-50"
+            onClick={() => onFrameClick?.(frame)}  
+            className="cursor-pointer border border-gray-300 rounded-lg p-2 flex flex-col items-center bg-gray-50 hover:shadow-md transition"
           >
-            {/* Görsel kutusu */}
             <div className="w-full h-24 rounded overflow-hidden mb-2">
               <img
                 src={`http://localhost:5050${frame.path}`}
@@ -18,8 +18,6 @@ const FrameGallery = ({ frames = [] }) => {
                 className="w-full h-full object-cover"
               />
             </div>
-
-            {/* Açıklamalar */}
             <span className="text-xs text-gray-600 font-medium">
               {frame.measureType?.toUpperCase?.() || "UNKNOWN"}
             </span>
@@ -32,5 +30,6 @@ const FrameGallery = ({ frames = [] }) => {
     </div>
   );
 };
+
 
 export default FrameGallery;

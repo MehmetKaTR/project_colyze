@@ -174,11 +174,13 @@ const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode
         >
           {polygons.map((polygon, index) => {
             const polygonId = isNaN(polygon.id) ? `polygon-${index}` : polygon.id;
+            const status = polygon.status
             return (
               <Polygon
                 key={polygonId}
                 polygon={{ ...polygon, focused: polygon.id === focusedId }}
                 onUpdate={onPolygonUpdate}
+                status = {status}
               />
             );
           })}

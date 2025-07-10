@@ -1,117 +1,75 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import FrameGallery from "../FrameGallery";
 import MeasurementLog from "../MeasurementLog";
 
 export const Auto = () => {
   const [leftFrames, setLeftFrames] = useState([]);
+  const [focusedFrame, setFocusedFrame] = useState(null);
   const [measurementResults, setMeasurementResults] = useState([]);
-  const [usedResultIds, setUsedResultIds] = useState(new Set());
 
   useEffect(() => {
-    const fetchFramesAndResults = async () => {
-      try {
-        const [framesRes, resultsRes] = await Promise.all([
-          fetch("http://localhost:5050/auto_frames"),
-          fetch("http://localhost:5050/get_frame_results"),
-        ]);
-
-        const [framesData, resultsData] = await Promise.all([
-          framesRes.json(),
-          resultsRes.json(),
-        ]);
-
-        if (!Array.isArray(framesData) || !Array.isArray(resultsData)) return;
-
-        const usedIds = new Set();
-
-        // Frame-Result eşleştirme
-        const matchedResults = framesData
-          .map((frameObj) => {
-            const frameDate = extractDatetimeFromFilename(frameObj.filename);
-            if (!frameDate) return null;
-
-            // En yakın ve kullanılmamış sonucu bul
-            const closestResult = findClosestDBResult(frameDate, resultsData, usedIds);
-            console.log(closestResult)
-
-            return closestResult ? { 
-              frame: frameObj.filename, 
-              result: closestResult 
-            } : null;
-          })
-          .filter(Boolean);
-
-        setLeftFrames(framesData);
-        setMeasurementResults(matchedResults.map((m) => m.result));
-        setUsedResultIds(usedIds); // durumu kaydet
-      } catch (err) {
-        console.error("Veriler alınamadı:", err);
-      }
-    };
-
-    fetchFramesAndResults();
+    async function fetchFrames() {
+      const res = await fetch("http://localhost:5050/auto_frames");
+      const data = await res.json();
+      setLeftFrames(data);
+    }
+    fetchFrames();
   }, []);
 
-  // Dosya isminden tarih saat çıkarma
-  function extractDatetimeFromFilename(filename) {
-    if (typeof filename !== "string") return null;
+  const handleFrameClick = async (frame) => {
+    setFocusedFrame(frame);
 
-    const match = filename.match(/\d{4}-\d{2}-\d{2}[T_]\d{2}-\d{2}-\d{2}/);
-    if (!match) return null;
+    const { typeNo, progNo, datetime, measureType } = frame;
+    if (!typeNo || !progNo || !datetime || !measureType) return;
 
-    let isoStr = match[0].replace("_", "T").replace(/-/g, ":");
-    isoStr = isoStr.replace(/^(\d{4}):(\d{2}):(\d{2})/, "$1-$2-$3");
+    // datetime örneği: "2025-07-10_12-04-16-100"
+    // Bunu "2025-07-10 12:04:16.100000" formatına çevirelim
+    let formattedDatetime = datetime;
 
-    return new Date(isoStr);
-  }
+    if (datetime.includes("_") && datetime.includes("-")) {
+      const [datePart, timePart] = datetime.split("_");
+      const [hour, minute, second, millisec] = timePart.split("-");
+      const microsec = (millisec || "0").padEnd(6, "0"); // 6 hane mikro saniye için
+      formattedDatetime = `${datePart} ${hour}:${minute}:${second}.${microsec}`;
+    }
+    console.log(formattedDatetime)
 
-  // En yakın ve kullanılmamış sonucu bulma
-  function findClosestDBResult(frameDate, dbResults, usedIds) {
-    if (!frameDate) return null;
+    const query = new URLSearchParams({
+      typeNo,
+      progNo,
+      datetime: formattedDatetime,
+      measureType,
+    }).toString();
 
-    const parsedResults = dbResults
-      .map((row) => ({
-        ...row,
-        dateObj: parseDBDate(row.DateTime),
-        diffMs: Math.abs(parseDBDate(row.DateTime) - frameDate),
-      }))
-      .filter((r) => !isNaN(r.dateObj) && !usedIds.has(r.ID));
+    console.log("Gönderilen query:", decodeURIComponent(query));
 
-    if (parsedResults.length === 0) return null;
+    const res = await fetch(`http://localhost:5050/get_result_by_metadata?${query}`);
+    const result = await res.json();
+    console.log("HOCAM", result);
 
-    parsedResults.sort((a, b) => a.diffMs - b.diffMs);
-
-    const closest = parsedResults[0];
-    if (closest && closest.ID) usedIds.add(closest.ID);
-
-    return closest;
-  }
-
-  // DB tarih stringini Date objesine çevirme
-  function parseDBDate(str) {
-    if (typeof str !== "string") return new Date(0);
-
-    const [day, month, rest] = str.split(".");
-    if (!rest) return new Date(0);
-    const [year, time] = rest.split(" ");
-    if (!time) return new Date(0);
-
-    const timeClean = time.split(".")[0];
-    return new Date(`${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${timeClean}`);
-  }
+    setMeasurementResults(result ? [result] : []);
+  };
 
   return (
-    <div className="min-h-screen flex bg-gray-100 pt-20 p-6 space-x-6">
-      {/* Sol Panel */}
-      <div className="w-1/2 flex flex-col space-y-4">
-        <FrameGallery frames={leftFrames} />
-        <MeasurementLog results={measurementResults} showFrameIds={true} leftFrames={leftFrames} />
+    <div className="min-h-screen bg-gray-100 pt-20 p-6 space-y-6">
+      <div className="w-full h-[500px] bg-white border shadow rounded flex items-center justify-center">
+        {focusedFrame ? (
+          <img
+            src={`http://localhost:5050${focusedFrame.path}`}
+            alt="Focused Frame"
+            className="h-full object-contain"
+          />
+        ) : (
+          <p className="text-gray-500 text-xl">Bir frame seçiniz...</p>
+        )}
       </div>
 
-      {/* Sağ Panel (İstersen aynısını koyabilirsin) */}
-      <div className="w-1/2 flex flex-col space-y-4">
-        <FrameGallery frames={leftFrames} />
-        <MeasurementLog results={measurementResults} showFrameIds={true} leftFrames={leftFrames} />
+      <MeasurementLog results={measurementResults} showFrameIds={false} />
+
+      <div className="flex space-x-6">
+        <div className="w-full flex flex-col space-y-4">
+          <FrameGallery frames={leftFrames} onFrameClick={handleFrameClick} />
+        </div>
       </div>
     </div>
   );

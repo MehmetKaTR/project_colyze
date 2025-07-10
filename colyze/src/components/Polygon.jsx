@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-const Polygon = ({ polygon, onClick, onUpdate }) => {
+const Polygon = ({ polygon, onClick, onUpdate, status }) => {
   const [draggingIndex, setDraggingIndex] = useState(null);
   const [draggingPolygon, setDraggingPolygon] = useState(false);
 
@@ -93,7 +93,15 @@ const Polygon = ({ polygon, onClick, onUpdate }) => {
         handleAddPoint(e); // Shift+click için
       }}
     >
-      <polygon points={pointString} fill={polygon.focused ? "rgba(0,0,255,0.4)" : "transparent"} stroke="white" strokeWidth="2" />
+      <polygon points={pointString} fill={
+        polygon.focused
+          ? "rgba(0,0,255,0.4)" 
+          : status === "OK"
+            ? "rgb(16, 230, 69)" 
+            : status === "NOK"
+              ? "rgba(192, 36, 36, 0.86)" 
+              : "transparent"
+      } stroke="white" strokeWidth="2" />
       {polygon.points.map((p, index) => (
         <circle
           key={index}

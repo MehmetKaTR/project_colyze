@@ -1,8 +1,12 @@
+import base64
 from flask import Blueprint, request, jsonify
-from datetime import datetime
+from datetime import datetime, timedelta
+import traceback
+from pathlib import Path
 import pyodbc
 
 db_bp = Blueprint('db', __name__)
+TEMP_FRAMES_DIR = Path("temp_frames")
 
 # Access veritabanı bağlantısı
 db_path = r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\AccessDBS\colyze.accdb"  # ← Burayı kendine göre düzelt
@@ -144,7 +148,7 @@ def get_tools_by_typeprog():
             tools[tool_no] = []
         tools[tool_no].append({'x': x, 'y': y})
 
-    result = [{'id': tool_no, 'points': points} for tool_no, points in tools.items()]
+    result = [{'id': tool_no, 'points': points, 'status' : 'empty'} for tool_no, points in tools.items()]
     return jsonify(result)
 
 @db_bp.route('/update-polygons', methods=['POST'])
@@ -441,20 +445,39 @@ def save_results():
         barcode = data['Barcode']
         tool_count = data['ToolCount']
         result = data['Result']
+        raw_datetime = data['DateTime']
 
-        now = datetime.now().strftime('%d.%m.%Y %H:%M:%S.%f')[:-3]  # Access için mikro saniyeyi 3 haneye indir
+
+        # Doğru parçalama
+        if "_" not in raw_datetime:
+            raise ValueError("DateTime formatı '_' içermiyor!")
+        
+        date_part, time_part = raw_datetime.split('_')  # "2025-07-10", "10-10-29-333"
+        time_parts = time_part.split('-')  # ["10", "10", "29", "333"]
+
+        if len(time_parts) != 4:
+            raise ValueError("Zaman formatı geçersiz!")
+
+        # microsecond'u 6 haneli yap
+        raw_dt = f"{date_part} {time_parts[0]}:{time_parts[1]}:{time_parts[2]}.{time_parts[3]}000"
+        dt_obj = datetime.strptime(raw_dt, "%Y-%m-%d %H:%M:%S.%f")
+
+        # Veritabanı için istenen format
+        formatted_datetime = dt_obj.strftime("%d.%m.%Y %H:%M:%S.%f")[:-1]
+
+        # SQL Insert
         cursor.execute("""
-            INSERT INTO Results ([DateTime], [TypeNo], [ProgNo], [MeasType], [Barcode], [ToolCount], [Result])
+            INSERT INTO Results ([DateTime], TypeNo, ProgNo, MeasType, Barcode, ToolCount, Result)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (now, type_no, prog_no, meas_type, barcode, tool_count, result))
+        """, (formatted_datetime, type_no, prog_no, meas_type, barcode, tool_count, result))
 
         conn.commit()
         return jsonify({"message": "Sonuç kaydedildi"}), 200
 
     except Exception as e:
-        import traceback
         print("Save_results_hist HATASI:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+
     
 
 @db_bp.route("/get_frame_results")
@@ -482,7 +505,63 @@ def get_frame_results():
         result.append(row_dict)
 
     conn.commit()
+    print(result)
     return jsonify(result)
 
+@db_bp.route("/get_result_by_metadata", methods=["GET"])
+def get_result_by_metadata():
+    try:
+        # Parametreleri al
+        type_no = int(request.args.get("typeNo"))
+        prog_no = int(request.args.get("progNo"))
+        measure_type = request.args.get("measureType").upper()
+        datetime_str = request.args.get("datetime")  # Örn: "2025-07-10 12-04-16-100"
 
+        # Tarih format kontrolü
+        if " " not in datetime_str:
+            return jsonify({"error": "Invalid datetime format"}), 400
+
+        date_part, time_part = datetime_str.split(" ")
+
+        try:
+            hour, minute, second, millisec = time_part.split("-")
+        except Exception as e:
+            return jsonify({"error": f"Invalid time format: {str(e)}"}), 400
+
+        microsec = millisec.ljust(6, '0')  # mikrosaniyeyi 6 haneye tamamla
+
+        # Biçimlendirilmiş tarih-zaman stringi
+        fixed_time = f"{hour}:{minute}:{second}.{microsec}"
+        fixed_datetime_str = f"{date_part} {fixed_time}"
+
+        # Python datetime nesnesine dönüştür
+        dt_obj = datetime.strptime(fixed_datetime_str, "%Y-%m-%d %H:%M:%S.%f")
+        dt_obj = dt_obj.replace(microsecond=0)  # Access mikro saniye desteklemez
+
+        # SQL sorgusunu çalıştır: zaman aralığıyla eşleşenleri al
+        cursor.execute("""
+            SELECT * FROM Results 
+            WHERE DateTime >= ? AND DateTime < ?
+              AND TypeNo = ? AND ProgNo = ? AND MeasType = ?
+        """, (dt_obj, dt_obj + timedelta(seconds=1), type_no, prog_no, measure_type))
+
+        row = cursor.fetchone()
+        if row:
+            columns = [desc[0] for desc in cursor.description]
+            result_dict = {}
+
+            # bytes tipindeki verileri JSON için uygun hale getir
+            for key, value in zip(columns, row):
+                if isinstance(value, bytes):
+                    result_dict[key] = base64.b64encode(value).decode('utf-8')
+                else:
+                    result_dict[key] = value
+
+            return jsonify(result_dict)
+        else:
+            return jsonify(None)
+
+    except Exception as e:
+        print("[get_result_by_metadata] Hata:", str(e))
+        return jsonify({"error": str(e)}), 
 
