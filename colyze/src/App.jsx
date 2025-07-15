@@ -6,7 +6,6 @@ import { FParams } from "./components/sections/FParams";
 import { Auto } from "./components/sections/Auto";
 import { Projects } from "./components/sections/Projects";
 import "./index.css"
-import { Contact } from "./components/sections/Contact";
 
 function App() {
   const [isLoaded, setIsLoaded] = useState(false);

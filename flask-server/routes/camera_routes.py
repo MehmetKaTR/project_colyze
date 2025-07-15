@@ -93,17 +93,17 @@ def save_frame():
         datetime_str = data.get("datetime")
         results = data.get("results")
 
-        print("HABURDA", datetime_str)
         print("resultinyo", results)
 
-        # Format results
-        formatted_results = []
-        for r in results:
-            status_labels = ["OK" if s else "NOK" for s in r["each_status"]]
-            formatted_results.append({
-                "id": r["id"],
-                "each_status_labels": status_labels
-            })
+        # Format results (only for RGBI, not modifying structure)
+        if measure_type == "rgbi":
+            formatted_results = []
+            for r in results:
+                status_labels = ["OK" if s else "NOK" for s in r["each_status"]]
+                formatted_results.append({
+                    "id": r["id"],
+                    "each_status_labels": status_labels
+                })
 
         # Check image data
         if not image_data_url:
@@ -138,19 +138,30 @@ def save_frame():
         text_path = temp_text_dir / f"{filename_base}.txt"
         with open(text_path, "w", encoding="utf-8") as f:
             for r in results:
-                status_labels = ["OK" if s else "NOK" for s in r["each_status"]]
                 f.write(f"ID {r['id']}:\n")
-                f.write(f"  R: {r['avg_r']:.2f} -> {status_labels[0]}\n")
-                f.write(f"  G: {r['avg_g']:.2f} -> {status_labels[1]}\n")
-                f.write(f"  B: {r['avg_b']:.2f} -> {status_labels[2]}\n")
-                f.write(f"  I: {r['intensity']:.2f} -> {status_labels[3]}\n")
+
+                if measure_type == "rgbi":
+                    status_labels = ["OK" if s else "NOK" for s in r["each_status"]]
+                    f.write(f"  R: {r['avg_r']:.2f} -> {status_labels[0]}\n")
+                    f.write(f"  G: {r['avg_g']:.2f} -> {status_labels[1]}\n")
+                    f.write(f"  B: {r['avg_b']:.2f} -> {status_labels[2]}\n")
+                    f.write(f"  I: {r['intensity']:.2f} -> {status_labels[3]}\n")
+
+                elif measure_type == "histogram":
+                    scores = r.get("scores", {})
+                    f.write(f"  R_diff: {scores.get('R', 0):.4f}\n")
+                    f.write(f"  G_diff: {scores.get('G', 0):.4f}\n")
+                    f.write(f"  B_diff: {scores.get('B', 0):.4f}\n")
+
                 f.write(f"  RESULT: {r['status']}\n")
                 f.write("\n")
 
-
         return jsonify({"saved": True, "filename": f"{filename_base}.jpg"})
     except Exception as e:
+        import traceback
+        print("save_frame HATASI:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+
 
 
 @camera_bp.route('/save_frame_with_polygons', methods=['POST'])
@@ -180,6 +191,7 @@ def save_frame_with_polygons():
 
         # Üzerine çizim için overlay (alpha karışımı için)
         overlay = frame.copy()
+        print("görelim bakalım",polygons)
 
         for polygon in polygons:
             points = polygon.get("points", [])
@@ -426,8 +438,8 @@ def calculate_rgbi():
         return jsonify({"error": str(e)}), 500
 
 
-@camera_bp.route('/measure_histogram', methods=['POST'])
-def measure_histogram():
+@camera_bp.route('/calculate_histogram', methods=['POST'])
+def calculate_histogram():
     try:
         import base64, cv2, numpy as np
 

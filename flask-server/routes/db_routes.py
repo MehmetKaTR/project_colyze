@@ -303,7 +303,7 @@ def save_histogram():
         return jsonify({"error": str(e)}), 500
 
 
-@db_bp.route('/get_histograms')
+@db_bp.route('/get_histogram_teach')
 def get_histograms():
     try:
         type_no = request.args.get("typeNo")

@@ -97,6 +97,22 @@ const fetchRgbiTeachTolerance = async (typeNo, progNo) => {
   }
 };
 
+
+const fetchHistTeachTolerance = async (typeNo, progNo) => {
+  try {
+    const res = await fetch(`http://localhost:5050/get_histogram_teach?typeNo=${typeNo}&progNo=${progNo}`);
+    if (!res.ok) {
+      alert("HIST teach verisi çekilemedi.");
+      return null;
+    }
+    const data = await res.json();
+    return data; 
+  } catch (e) {
+    console.error("Teach verisi çekme hatası:", e);
+    return null;
+  }
+};
+
 export const sendPolygonsToCalculateRgbi = async ({
   typeNo,
   progNo,
@@ -230,6 +246,151 @@ export const sendPolygonsToCalculateRgbi = async ({
   }
 };
 
+export const sendPolygonsToCalculateHistogram = async ({
+  typeNo,
+  progNo,
+  setHistogramResults,
+  imageDataUrl,
+  datetime
+}) => {
+  try {
+    if (!typeNo || !progNo) {
+      alert("TypeNo veya ProgNo tanımlı değil!");
+      return;
+    }
+
+    if (!imageDataUrl) {
+      alert("Görüntü verisi yok.");
+      return;
+    }
+
+    // Poligonları çek
+    const polyRes = await fetch(
+      `http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`
+    );
+    if (!polyRes.ok) {
+      alert("Poligonlar çekilemedi.");
+      return;
+    }
+    const polygons = await polyRes.json();
+
+    // Teach histogram verisini çek
+    const teachRes = await fetch(
+      `http://localhost:5050/get_histogram_teach?typeNo=${typeNo}&progNo=${progNo}`
+    );
+    if (!teachRes.ok) {
+      alert("Teach histogram verisi çekilemedi.");
+      return;
+    }
+
+    const teachData = await teachRes.json();
+
+    // Görselden histogram hesaplat
+    const response = await fetch("http://localhost:5050/calculate_histogram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        typeNo,
+        progNo,
+        polygons,
+        image: imageDataUrl,
+        teachHistograms: teachData  
+      }),
+    });
+
+
+    const results = await response.json();
+
+    // Histogram karşılaştırması ve kontrol
+    const checkedResults = results.map((tool) => {
+    const teach = teachData.find((t) => t.toolId === tool.id.toString());
+
+    if (!teach) {
+      return { ...tool, status: "NOK", diff: null };
+    }
+
+    // tool içinde histogram yok, o yüzden histogram farkı hesaplanmaz
+    // sadece Flask’ın dönmüş olduğu diff_x değerlerini kullan
+    const diff = {
+      r: tool.diff_r,
+      g: tool.diff_g,
+      b: tool.diff_b,
+    };
+
+    const avgDiff = (diff.r + diff.g + diff.b) / 3;
+    const isOk = avgDiff < 0.1;
+
+    return {
+      ...tool,
+      status: isOk ? "OK" : "NOK",
+      diff,
+    };
+  });
+
+    setHistogramResults(checkedResults);
+    console.log("HELLOMA", checkedResults);
+
+    const processedResults = checkedResults.map(({ id, diff_r, diff_g, diff_b, status }) => ({
+      id,
+      scores: {
+        R: diff_r,
+        G: diff_g,
+        B: diff_b,
+      },
+      status,
+    }));
+
+    console.log("formatted", processedResults);
+
+
+    // Görseli ve sonuçları kaydet
+    const saveRes = await fetch("http://localhost:5050/save_frame", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        typeNo,
+        progNo,
+        measureType: "histogram",
+        image: imageDataUrl,
+        datetime,
+        results: processedResults,
+      }),
+    });
+
+    if (!saveRes.ok) {
+      alert("Görsel kaydedilemedi.");
+      return;
+    }
+
+    console.log("BURAYA BAK",checkedResults)
+
+    // Genel sonucu kaydet
+    const overallResult = checkedResults.every(r => r.status === "OK") ? "OK" : "NOK";
+    const toolCount = checkedResults.length;
+
+    await fetch("http://localhost:5050/save_results", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        TypeNo: typeNo,
+        ProgNo: progNo,
+        MeasType: "Histogram",
+        Barcode: "1",
+        ToolCount: toolCount,
+        Result: overallResult,
+        DateTime: datetime,
+      }),
+    });
+
+    alert("Histogram ölçümü tamamlandı.");
+    return checkedResults;
+
+  } catch (err) {
+    console.error("Histogram hesaplama hatası:", err);
+    alert("Histogram hesaplama başarısız.");
+    return [];
+  }
+};
 
 
 const captureSingleMeasurement = async (imageElement, polygonData) => {
@@ -271,7 +432,7 @@ export const SendHistResultToDB = async () => {
 };
 
 
-export const SaveFrameWithPolygons = async (typeNo, progNo, polygons, imageDataUrl, datetime) => {
+export const SaveFrameWithPolygons = async (typeNo, progNo, polygons, measurement_type, imageDataUrl, datetime) => {
   try {
       if (typeNo == null || progNo == null) {
         alert("TypeNo veya ProgNo tanımlı değil!");
@@ -290,7 +451,7 @@ export const SaveFrameWithPolygons = async (typeNo, progNo, polygons, imageDataU
         body: JSON.stringify({ 
           typeNo, 
           progNo, 
-          measureType: "rgbi",  
+          measureType: measurement_type,  
           image: imageDataUrl,
           datetime: datetime,
           polygons: polygons 
@@ -307,7 +468,7 @@ export const SaveFrameWithPolygons = async (typeNo, progNo, polygons, imageDataU
 
   }
   catch (err) {
-      console.error("RGBI hesaplama hatası:", err);
+      console.error("Poligon (Renkli) kaydetme hatası:", err);
       alert("RGBI hesaplama başarısız.");
   }
 };
