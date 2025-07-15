@@ -1,9 +1,46 @@
+// Auto.jsx
 import React, { useState, useEffect } from "react";
 import FrameGallery from "../FrameGallery";
 import MeasurementLog from "../MeasurementLog";
 
+// Helper: result_lines dizisini poligon bazında parse eder ve sayıları tam sayıya yuvarlar
+const parseResultLines = (lines) => {
+  const results = [];
+  let current = null;
+
+  lines.forEach(line => {
+    if (!line || typeof line !== "string") return; // Güvenlik kontrolü
+
+    const text = line.trim();
+    if (!text) return; // Boş satırları atla
+
+    if (text.startsWith("ID ")) {
+      if (current) results.push(current);
+      const idMatch = text.match(/\d+/);
+      const id = idMatch ? parseInt(idMatch[0], 10) : null;
+      current = { id, R: null, G: null, B: null, I: null, Result: null };
+    } else if (current) {
+      if (text.startsWith("R:")) {
+        current.R = Math.round(parseFloat(text.split(":")[1].split("->")[0].trim()));
+      } else if (text.startsWith("G:")) {
+        current.G = Math.round(parseFloat(text.split(":")[1].split("->")[0].trim()));
+      } else if (text.startsWith("B:")) {
+        current.B = Math.round(parseFloat(text.split(":")[1].split("->")[0].trim()));
+      } else if (text.startsWith("I:")) {
+        current.I = Math.round(parseFloat(text.split(":")[1].split("->")[0].trim()));
+      } else if (text.startsWith("RESULT:")) {
+        current.Result = text.split(":")[1].trim();
+      }
+    }
+  });
+
+  if (current) results.push(current);
+  return results;
+};
+
 export const Auto = () => {
   const [leftFrames, setLeftFrames] = useState([]);
+  const [rightFrames, setRightFrames] = useState([]);
   const [focusedFrame, setFocusedFrame] = useState(null);
   const [measurementResults, setMeasurementResults] = useState([]);
 
@@ -19,35 +56,17 @@ export const Auto = () => {
   const handleFrameClick = async (frame) => {
     setFocusedFrame(frame);
 
-    const { typeNo, progNo, datetime, measureType } = frame;
-    if (!typeNo || !progNo || !datetime || !measureType) return;
+    const res = await fetch(
+      `http://localhost:5050/auto_result_text?filename=${frame.filename}`
+    );
+    const data = await res.json();
 
-    // datetime örneği: "2025-07-10_12-04-16-100"
-    // Bunu "2025-07-10 12:04:16.100000" formatına çevirelim
-    let formattedDatetime = datetime;
-
-    if (datetime.includes("_") && datetime.includes("-")) {
-      const [datePart, timePart] = datetime.split("_");
-      const [hour, minute, second, millisec] = timePart.split("-");
-      const microsec = (millisec || "0").padEnd(6, "0"); // 6 hane mikro saniye için
-      formattedDatetime = `${datePart} ${hour}:${minute}:${second}.${microsec}`;
+    if (data?.result_lines) {
+      const parsedResults = parseResultLines(data.result_lines);
+      setMeasurementResults(parsedResults);
+    } else {
+      setMeasurementResults([]);
     }
-    console.log(formattedDatetime)
-
-    const query = new URLSearchParams({
-      typeNo,
-      progNo,
-      datetime: formattedDatetime,
-      measureType,
-    }).toString();
-
-    console.log("Gönderilen query:", decodeURIComponent(query));
-
-    const res = await fetch(`http://localhost:5050/get_result_by_metadata?${query}`);
-    const result = await res.json();
-    console.log("HOCAM", result);
-
-    setMeasurementResults(result ? [result] : []);
   };
 
   return (
@@ -69,6 +88,9 @@ export const Auto = () => {
       <div className="flex space-x-6">
         <div className="w-full flex flex-col space-y-4">
           <FrameGallery frames={leftFrames} onFrameClick={handleFrameClick} />
+        </div>
+        <div className="w-full flex flex-col space-y-4">
+          <FrameGallery frames={rightFrames} onFrameClick={handleFrameClick} />
         </div>
       </div>
     </div>

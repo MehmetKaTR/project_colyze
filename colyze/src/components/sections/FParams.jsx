@@ -18,6 +18,7 @@ export const FParams = () => {
   const [measurementType, setMeasurementType] = useState(null);
   const [rgbiResults, setRgbiResults] = useState([]);
   const [histogramResults, setHistogramResults] = useState([]);
+  const [autoResultBuffer, setAutoResultBuffer] = useState([]);
 
 
   // Kamerayı başlatan fonksiyon
@@ -235,7 +236,8 @@ const deleteFocusedPolygon = async () => {
       imageDataUrl,
       datetime,
     });
-    console.log(results)
+    console.log("SÖYLE",results)
+    setAutoResultBuffer(results)
 
     const updatedPolygons = updatePolygonsWithStatus(polygons, results);
     setPolygons(updatedPolygons)

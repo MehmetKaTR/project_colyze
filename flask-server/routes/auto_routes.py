@@ -47,3 +47,26 @@ def get_auto_frames():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+
+@auto_bp.route("/auto_result_text", methods=["GET"])
+def get_result_text():
+    try:
+        filename = request.args.get("filename")
+        if not filename:
+            return jsonify({"error": "filename is required"}), 400
+
+        filename_base = Path(filename).stem
+        txt_path = Path("temp_texts") / f"{filename_base}.txt"
+
+        if not txt_path.exists():
+            return jsonify({"error": "Result file not found"}), 404
+
+        with open(txt_path, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f.readlines()]
+
+        return jsonify({"result_lines": lines})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+

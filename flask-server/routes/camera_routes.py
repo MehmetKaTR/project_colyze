@@ -90,31 +90,65 @@ def save_frame():
         type_no = data.get("typeNo", "unknown")
         prog_no = data.get("progNo", "unknown")
         measure_type = data.get("measureType", "unknown").lower()
-        datetime_str = data.get("datetime")  
-        print("HABURDA",datetime_str)
+        datetime_str = data.get("datetime")
+        results = data.get("results")
 
+        print("HABURDA", datetime_str)
+        print("resultinyo", results)
+
+        # Format results
+        formatted_results = []
+        for r in results:
+            status_labels = ["OK" if s else "NOK" for s in r["each_status"]]
+            formatted_results.append({
+                "id": r["id"],
+                "each_status_labels": status_labels
+            })
+
+        # Check image data
         if not image_data_url:
             return jsonify({"error": "Image data missing"}), 400
 
+        # Decode image
         header, encoded = image_data_url.split(",", 1)
         image_bytes = base64.b64decode(encoded)
         frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             return jsonify({'error': 'Invalid image data'}), 400
 
-        temp_dir = Path("temp_frames")
-        temp_dir.mkdir(exist_ok=True)
+        # Create temp dirs
+        temp_frame_dir = Path("temp_frames")
+        temp_frame_dir.mkdir(exist_ok=True)
 
+        temp_text_dir = Path("temp_texts")
+        temp_text_dir.mkdir(exist_ok=True)
+
+        # Create filename
         if datetime_str:
-            filename = f"{type_no}_{prog_no}_{datetime_str}_{measure_type}.jpg"
+            filename_base = f"{type_no}_{prog_no}_{datetime_str}_{measure_type}"
         else:
             now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
-            filename = f"{type_no}_{prog_no}_{now_str}_{measure_type}.jpg"
+            filename_base = f"{type_no}_{prog_no}_{now_str}_{measure_type}"
 
-        filepath = temp_dir / filename
-        cv2.imwrite(str(filepath), frame)
+        # Save image
+        image_path = temp_frame_dir / f"{filename_base}.jpg"
+        cv2.imwrite(str(image_path), frame)
 
-        return jsonify({"saved": True, "filename": filename})
+        # Save result as .txt
+        text_path = temp_text_dir / f"{filename_base}.txt"
+        with open(text_path, "w", encoding="utf-8") as f:
+            for r in results:
+                status_labels = ["OK" if s else "NOK" for s in r["each_status"]]
+                f.write(f"ID {r['id']}:\n")
+                f.write(f"  R: {r['avg_r']:.2f} -> {status_labels[0]}\n")
+                f.write(f"  G: {r['avg_g']:.2f} -> {status_labels[1]}\n")
+                f.write(f"  B: {r['avg_b']:.2f} -> {status_labels[2]}\n")
+                f.write(f"  I: {r['intensity']:.2f} -> {status_labels[3]}\n")
+                f.write(f"  RESULT: {r['status']}\n")
+                f.write("\n")
+
+
+        return jsonify({"saved": True, "filename": f"{filename_base}.jpg"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

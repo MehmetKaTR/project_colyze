@@ -115,27 +115,6 @@ export const sendPolygonsToCalculateRgbi = async ({
       return;
     }
 
-    // Öncelikle fotoğrafı kaydet
-    const saveResponse = await fetch("http://localhost:5050/save_frame", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        typeNo, 
-        progNo, 
-        measureType: "rgbi",  
-        image: imageDataUrl,
-        datetime: datetime 
-      }),
-    });
-
-    if (!saveResponse.ok) {
-      alert("Fotoğraf kaydetme başarısız.");
-      return;
-    }
-
-    const saveData = await saveResponse.json();
-    console.log("Fotoğraf kaydedildi:", saveData.filename);
-
     // Backend'den poligonları al
     const polyRes = await fetch(
       `http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`
@@ -170,20 +149,57 @@ export const sendPolygonsToCalculateRgbi = async ({
     // Gelen sonuçlara tolerans kontrolü uygula
     const checkedResults = results.map((tool) => {
       const tol = tolerance.find((t) => t.toolId === tool.id.toString());
-      if (!tol) return { ...tool, status: "NOK" };
-
+      if (!tol) return { ...tool, each_status:[], status: "NOK" };
+      /*
       const isOk =
         tool.avg_r >= tol.rMin && tool.avg_r <= tol.rMax &&
         tool.avg_g >= tol.gMin && tool.avg_g <= tol.gMax &&
         tool.avg_b >= tol.bMin && tool.avg_b <= tol.bMax &&
         tool.intensity >= tol.iMin && tool.intensity <= tol.iMax;
+      */
+      const isOkRed = 
+        tool.avg_r >= tol.rMin && tool.avg_r <= tol.rMax;
 
-      return { ...tool, status: isOk ? "OK" : "NOK" };
+      const isOkGreen = 
+        tool.avg_g >= tol.gMin && tool.avg_g <= tol.gMax;
+      
+      const isOkBlue = 
+        tool.avg_b >= tol.bMin && tool.avg_b <= tol.bMax;
+
+      const isOkIntensity =
+        tool.intensity >= tol.iMin && tool.intensity <= tol.iMax;
+
+      const isOk =
+        isOkRed && isOkGreen && isOkBlue && isOkIntensity;
+
+      return { ...tool, each_status: [isOkRed, isOkGreen, isOkBlue, isOkIntensity], status: isOk ? "OK" : "NOK" };
     });
 
     // Sonuçları ekrana yansıt
     setRgbiResults(checkedResults);
     console.log("RGBI Ölçüm Sonuçları:", checkedResults);
+
+    // Öncelikle fotoğrafı kaydet
+    const saveResponse = await fetch("http://localhost:5050/save_frame", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        typeNo, 
+        progNo, 
+        measureType: "rgbi",  
+        image: imageDataUrl,
+        datetime: datetime,
+        results: checkedResults 
+      }),
+    });
+
+    if (!saveResponse.ok) {
+      alert("Fotoğraf kaydetme başarısız.");
+      return;
+    }
+
+    const saveData = await saveResponse.json();
+    console.log("Fotoğraf kaydedildi:", saveData.filename);
 
     // Genel sonucu belirle (hepsi OK mı?)
     const overallResult = checkedResults.every(t => t.status === "OK") ? "OK" : "NOK";
