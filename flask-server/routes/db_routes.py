@@ -380,6 +380,66 @@ def get_rgbi_teach():
         return jsonify({"error": str(e)}), 500
 
 
+@db_bp.route('/get_results_to_db', methods=['POST'])
+def get_results_to_db():
+    try:
+        data = request.get_json()
+
+        type_no = data.get("type_no")
+        prog_no = data.get("prog_no")
+        meas_type = data.get("measure_type")
+        result = data.get("result")
+        barcode = data.get("barcode")
+
+        if not type_no or not prog_no:
+            return jsonify({"error": "Eksik parametre"}), 400
+
+        query = """
+            SELECT ID, DateTime, TypeNo, ProgNo, MeasType, Barcode, ToolCount, Result
+            FROM Results
+            WHERE TypeNo = ? AND ProgNo = ?
+        """
+        params = [type_no, prog_no]
+
+        if meas_type:
+            query += " AND MeasType = ?"
+            params.append(meas_type)
+        if result and result != "ALL":
+            query += " AND Result = ?"
+            params.append(result)
+        if barcode:
+            query += " AND Barcode = ?"
+            params.append(barcode)
+
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+
+        columns = [desc[0] for desc in cursor.description]
+
+        results = []
+        for row in rows:
+            row_dict = {}
+            for col, val in zip(columns, row):
+                # Eğer val bytes ise, decode et
+                if isinstance(val, bytes):
+                    try:
+                        val = val.decode('utf-8')
+                    except UnicodeDecodeError:
+                        val = val.hex()  # decode edilemezse hex string olarak döndür
+                row_dict[col] = val
+            results.append(row_dict)
+
+        return jsonify(results)
+
+    except Exception as e:
+        import traceback
+        print("🔴 get_results_to_db HATASI:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+
 @db_bp.route('/save_rgbi', methods=['POST'])
 def save_rgbi():
     try:

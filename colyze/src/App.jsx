@@ -4,6 +4,7 @@ import { Navbar } from "./components/Navbar";
 import { MobileMenu } from "./components/MobileMenu";
 import { FParams } from "./components/sections/FParams";
 import { Auto } from "./components/sections/Auto";
+import { Report } from "./components/sections/Report";
 import { Projects } from "./components/sections/Projects";
 import "./index.css"
 
@@ -25,6 +26,7 @@ function App() {
         
         {activeTab === "auto" && <Auto />}
         {activeTab === "f1" && <FParams />}
+        {activeTab === "report" && <Report />}
         {/*
         <About />
         <Projects />

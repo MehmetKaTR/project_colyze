@@ -1,97 +1,138 @@
-import { useState } from "react";
-import { RevealOnScroll } from "../RevealOnScroll";
-import emailjs from "emailjs-com";
+import React, { useState } from "react";
+import ResultTable from "../ResultTable"; // ResultTable.jsx ile aynı klasörde varsayıyoruz
+  
 
-export const Contact = () => {
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    message: "",
-  });
+// STILL IN PROCESS
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+export const Report = () => {
+  const [typeNo, setTypeNo] = useState(1);
+  const [progNo, setProgNo] = useState(1);
+  const [measType, setMeasType] = useState("");
+  const [result, setResult] = useState("ALL");
+  const [barcode, setBarcode] = useState("");
+  const [results, setResults] = useState([]);
 
-    emailjs
-      .sendForm(
-        import.meta.env.VITE_SERVICE_ID,
-        import.meta.env.VITE_TEMPLATE_ID,
-        e.target,
-        import.meta.env.VITE_PUBLIC_KEY
-      )
-      .then((result) => {
-        alert("Message Sent!");
-        setFormData({ name: "", email: "", message: "" });
-      })
-      .catch(() => alert("Oops! Something went wrong. Please try again."));
+  const handleSearch = async () => {
+    try {
+      const response = await fetch("http://localhost:5050/get_results_to_db", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          type_no: typeNo,
+          prog_no: progNo,
+          measure_type: measType,
+          result: result,
+          barcode: barcode
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Sunucu hatası: " + response.status);
+      }
+
+      const data = await response.json();
+      setResults(data);
+    } catch (err) {
+      console.error("API HATASI:", err);
+    }
+  };
+
+  const handleRefresh = () => {
+    setResults([]);
+  };
+
+  const handleExport = (type) => {
+    const dataStr = JSON.stringify(results, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = type === "pdf" ? "results.pdf" : "results.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <section
-      id="contact"
-      className="min-h-screen flex items-center justify-center py-20"
-    >
-      <RevealOnScroll>
-        <div className="px-4 w-full min-w-[300px] md:w-[500px] sm:w-2/3 p-6">
-          <h2 className="text-3xl font-bold mb-8 bg-gradient-to-r from-blue-500 to-cyan-400 bg-clip-text text-transparent text-center">
-            {" "}
-            Get In Touch
-          </h2>
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            <div className="relative">
-              <input
-                type="text"
-                id="name"
-                name="name"
-                required
-                value={formData.name}
-                className="w-full bg-white/5 border border-white/10 rounded px-4 py-3 text-white transition focus:outline-none focus:border-blue-500 focus:bg-blue-500/5"
-                placeholder="Name..."
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-              />
-            </div>
-
-            <div className="relative">
-              <input
-                type="email"
-                id="email"
-                name="email"
-                required
-                value={formData.email}
-                className="w-full bg-white/5 border border-white/10 rounded px-4 py-3 text-white transition focus:outline-none focus:border-blue-500 focus:bg-blue-500/5"
-                placeholder="example@gmail.com"
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
-              />
-            </div>
-
-            <div className="relative">
-              <textarea
-                id="message"
-                name="message"
-                required
-                rows={5}
-                value={formData.message}
-                className="w-full bg-white/5 border border-white/10 rounded px-4 py-3 text-white transition focus:outline-none focus:border-blue-500 focus:bg-blue-500/5"
-                placeholder="Your Message..."
-                onChange={(e) =>
-                  setFormData({ ...formData, message: e.target.value })
-                }
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-blue-500 text-white py-3 px-6 rounded font-medium transition relative overflow-hidden hover:-translate-y-0.5 hover:shadow-[0_0_15px_rgba(59,130,246,0.4)]"
+    <div className="min-h-screen bg-gray-100 pt-20 p-6 space-y-6">
+      {/* Üst Form */}
+      <div className="w-full border shadow rounded flex space-x-4 p-4 bg-white">
+        <div className="w-1/2 grid grid-cols-2 grid-rows-2 gap-2">
+          <div className="grid grid-cols-2">
+            <input
+              type="number"
+              value={typeNo}
+              onChange={(e) => setTypeNo(e.target.value)}
+              className="w-full text-center rounded border text-black"
+            />
+            <div className="flex items-center justify-center text-black">TYPE NO</div>
+          </div>
+          <div className="grid grid-cols-2">
+            <input
+              type="number"
+              value={progNo}
+              onChange={(e) => setProgNo(e.target.value)}
+              className="w-full text-center rounded border text-black"
+            />
+            <div className="flex items-center justify-center text-black">PROGRAM NO</div>
+          </div>
+          <div className="grid grid-cols-2">
+            <select
+              value={measType}
+              onChange={(e) => setMeasType(e.target.value)}
+              className="w-full text-center rounded border text-black"
             >
-              Send Message
-            </button>
-          </form>
+              <option value="">Seçiniz</option>
+              <option value="HIST">HIST</option>
+              <option value="RGBI">RGBI</option>
+            </select>
+            <div className="flex items-center justify-center text-black">MEASURE TYPE</div>
+          </div>
+          <div className="grid grid-cols-2">
+            <select
+              value={result}
+              onChange={(e) => setResult(e.target.value)}
+              className="w-full text-center rounded border text-black"
+            >
+              <option value="OK">OK</option>
+              <option value="NOK">NOK</option>
+              <option value="ALL">ALL</option>
+            </select>
+            <div className="flex items-center justify-center text-black">RESULT</div>
+          </div>
         </div>
-      </RevealOnScroll>
-    </section>
+
+        {/* Sağ taraf (Barcode + Butonlar) */}
+        <div className="w-1/2 flex flex-col justify-between space-y-4">
+          <input
+            type="text"
+            value={barcode}
+            onChange={(e) => setBarcode(e.target.value)}
+            placeholder="Barcode..."
+            className="w-full text-center rounded border h-10"
+          />
+          <div className="grid grid-cols-4 gap-2">
+            <button onClick={handleSearch} className="bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+              SEARCH
+            </button>
+            <button onClick={handleRefresh} className="bg-green-600 text-white py-2 rounded hover:bg-green-700">
+              REFRESH
+            </button>
+            <button onClick={() => handleExport("pdf")} className="bg-yellow-500 text-white py-2 rounded hover:bg-yellow-600">
+              PDF
+            </button>
+            <button onClick={() => handleExport("excel")} className="bg-gray-500 text-white py-2 rounded hover:bg-gray-600">
+              EXCEL
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Alt Sonuç Tablosu */}
+      <div className="w-full bg-white border shadow rounded p-4 max-h-[600px] overflow-auto">
+        <ResultTable results={results} />
+      </div>
+    </div>
   );
 };
