@@ -1,8 +1,6 @@
 import React, { useState } from "react";
-import ResultTable from "../ResultTable"; // ResultTable.jsx ile aynı klasörde varsayıyoruz
-  
-
-// STILL IN PROCESS
+import ResultTable from "../ResultTable";
+import { exportPDF, exportExcel } from "../ExportUtils";
 
 export const Report = () => {
   const [typeNo, setTypeNo] = useState(1);
@@ -17,15 +15,15 @@ export const Report = () => {
       const response = await fetch("http://localhost:5050/get_results_to_db", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           type_no: typeNo,
           prog_no: progNo,
           measure_type: measType,
           result: result,
-          barcode: barcode
-        })
+          barcode: barcode,
+        }),
       });
 
       if (!response.ok) {
@@ -44,14 +42,11 @@ export const Report = () => {
   };
 
   const handleExport = (type) => {
-    const dataStr = JSON.stringify(results, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = type === "pdf" ? "results.pdf" : "results.xlsx";
-    a.click();
-    URL.revokeObjectURL(url);
+    if (type === "pdf") {
+      exportPDF(results);
+    } else if (type === "excel") {
+      exportExcel(results);
+    }
   };
 
   return (
@@ -113,16 +108,28 @@ export const Report = () => {
             className="w-full text-center rounded border h-10"
           />
           <div className="grid grid-cols-4 gap-2">
-            <button onClick={handleSearch} className="bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+            <button
+              onClick={handleSearch}
+              className="bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+            >
               SEARCH
             </button>
-            <button onClick={handleRefresh} className="bg-green-600 text-white py-2 rounded hover:bg-green-700">
+            <button
+              onClick={handleRefresh}
+              className="bg-green-600 text-white py-2 rounded hover:bg-green-700"
+            >
               REFRESH
             </button>
-            <button onClick={() => handleExport("pdf")} className="bg-yellow-500 text-white py-2 rounded hover:bg-yellow-600">
+            <button
+              onClick={() => handleExport("pdf")}
+              className="bg-yellow-500 text-white py-2 rounded hover:bg-yellow-600"
+            >
               PDF
             </button>
-            <button onClick={() => handleExport("excel")} className="bg-gray-500 text-white py-2 rounded hover:bg-gray-600">
+            <button
+              onClick={() => handleExport("excel")}
+              className="bg-gray-500 text-white py-2 rounded hover:bg-gray-600"
+            >
               EXCEL
             </button>
           </div>
