@@ -51,12 +51,5 @@ Project Colyze is a **web-based part measurement and inspection system** that co
 - Node.js 18+ (for frontend)  
 - React.js setup  
 
-### Installation
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/yourusername/project-colyze.git
-cd project-colyze
 
 
