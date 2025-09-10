@@ -275,7 +275,6 @@ def live_camera():
         return jsonify({'error': 'Kameradan görüntü alınamadı'}), 500
 
     # Access'ten crop koordinatlarını çek
-    import pyodbc
     db_path = r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\AccessDBS\colyze.accdb"
     conn_str = (
         r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'

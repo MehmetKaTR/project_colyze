@@ -99,7 +99,7 @@ export const Report = () => {
         </div>
 
         {/* Sağ taraf (Barcode + Butonlar) */}
-        <div className="w-1/2 flex flex-col justify-between space-y-4">
+        <div className="w-1/2 flex flex-col justify-between space-y-4 text-black">
           <input
             type="text"
             value={barcode}

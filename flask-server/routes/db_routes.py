@@ -202,13 +202,11 @@ def delete_polygon():
             DELETE FROM ToolsF1
             WHERE TypeNo = ? AND ProgNo = ? AND ToolNo = ?
         """, (type_no, prog_no, tool_id))
-
         # HistTeach tablosundan sil
         cursor.execute("""
             DELETE FROM HistTeach
             WHERE TypeNo = ? AND ProgNo = ? AND Tool_ID = ?
         """, (type_no, prog_no, tool_id))
-
         conn.commit()
         return jsonify({"message": f"Polygon {tool_id} veritabanından silindi."})
 
