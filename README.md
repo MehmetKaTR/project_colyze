@@ -60,7 +60,7 @@ Project Colyze is a **web-based part measurement and inspection system** that co
 powershell
 ```
 git clone https://github.com/MehmetKaTR/project_colyze.git
-cd project_colyz
+cd project_colyze
 ```
 
 Backend (Python / Flask) kurulumu:
@@ -125,6 +125,9 @@ npm run dev
 Frontend: http://localhost:5173/ (veya Vite config’de ayarladığınız path)
 
 Backend API: http://127.0.0.1:5000/
+
+NOT: Database olmadan sağlıklı çalışmaz.
+İletişime geçiniz
 
 
 
