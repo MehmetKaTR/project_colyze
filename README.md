@@ -63,11 +63,10 @@ git clone https://github.com/MehmetKaTR/project_colyze.git
 cd project_colyze
 ```
 
-Backend (Python / Flask) kurulumu:
+- Backend (Python / Flask) kurulumu:
 
 powershell
 ```
-Copy code
 cd flask-server
 
 # Virtual environment oluştur
@@ -86,11 +85,10 @@ pip install -r requirements.txt
 Eğer requirements.txt yoksa, pip ile aşağıdaki paketleri yükleyebilirsiniz:
 Flask, flask-cors, opencv-python, opencv-contrib-python, numpy, pyodbc, py-tisgrabber, PyQt5 ve diğer listelenmiş paketler.
 
-Frontend (React / Vite) kurulumu:
+- Frontend (React / Vite) kurulumu:
 
 powershell
 ```
-Copy code
 cd ..\colyze
 
 # Node paketlerini yükle
@@ -99,14 +97,10 @@ npm ci
 
 npm ci lockfile kullanır, paket sürümlerinin tutarlı olmasını sağlar. Lockfile yoksa npm install kullanabilirsiniz.
 
-Running the Project (Development)
-Backend:
-
+- Running the Project (Development) Backend:
 
 powershell
-
 ```
-Copy code
 cd flask-server
 .\colyze-flask-env\Scripts\Activate.ps1
 python app.py
@@ -115,8 +109,6 @@ python app.py
 Frontend:
 
 powershell
-
-Copy code
 ```
 cd colyze
 npm run dev
@@ -126,8 +118,7 @@ Frontend: http://localhost:5173/ (veya Vite config’de ayarladığınız path)
 
 Backend API: http://127.0.0.1:5000/
 
-NOT: Database olmadan sağlıklı çalışmaz.
-İletişime geçiniz
+NOT: Database olmadan sağlıklı çalışmaz. İletişime geçiniz
 
 
 
