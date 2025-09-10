@@ -1,0 +1,14 @@
+ID 1:
+  R: 54.30 -> NOK
+  G: 49.70 -> NOK
+  B: 47.70 -> NOK
+  I: 50.60 -> NOK
+  RESULT: NOK
+
+ID 2:
+  R: 143.20 -> NOK
+  G: 156.40 -> NOK
+  B: 172.50 -> NOK
+  I: 157.40 -> NOK
+  RESULT: NOK
+

@@ -1,0 +1,12 @@
+ID 1:
+  R_diff: 0.0562
+  G_diff: 0.0572
+  B_diff: 0.0550
+  RESULT: OK
+
+ID 2:
+  R_diff: 0.1642
+  G_diff: 0.1684
+  B_diff: 0.1539
+  RESULT: NOK
+

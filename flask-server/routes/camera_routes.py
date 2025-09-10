@@ -11,7 +11,11 @@ import pyodbc
 import csv
 
 camera_bp = Blueprint('camera', __name__)
-ic = ctypes.cdll.LoadLibrary(r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\Colyze\flask-server\routes\tisgrabber_x64.dll")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# DLL yolu
+dll_path = os.path.join(BASE_DIR, "tisgrabber_x64.dll")
+ic = ctypes.cdll.LoadLibrary(dll_path)
 tis.declareFunctions(ic)
 ic.IC_InitLibrary(0)
 
@@ -440,8 +444,6 @@ def calculate_rgbi():
 @camera_bp.route('/calculate_histogram', methods=['POST'])
 def calculate_histogram():
     try:
-        import base64, cv2, numpy as np
-
         data = request.get_json()
         type_no = data.get("typeNo")
         prog_no = data.get("progNo")
@@ -517,11 +519,6 @@ def calculate_histogram():
 @camera_bp.route('/teach_histogram', methods=['POST'])
 def teach_histogram():
     try:
-        import base64
-        import cv2
-        import numpy as np
-        from flask import jsonify, request
-
         data = request.get_json()
         type_no = data.get("typeNo")
         prog_no = data.get("progNo")

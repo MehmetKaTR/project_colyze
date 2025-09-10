@@ -22,7 +22,7 @@ function App() {
       >
         
         <Navbar menuOpen={menuOpen} setMenuOpen={setMenuOpen} setActiveTab={setActiveTab} />
-        <MobileMenu menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+        <MobileMenu menuOpen={menuOpen} setMenuOpen={setMenuOpen} setActiveTab={setActiveTab} />
         
         {activeTab === "auto" && <Auto />}
         {activeTab === "f1" && <FParams />}
