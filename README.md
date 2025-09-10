@@ -57,7 +57,6 @@ Project Colyze is a **web-based part measurement and inspection system** that co
 
 #### Repo’yu klonlayın:
 
-powershell
 ```
 git clone https://github.com/MehmetKaTR/project_colyze.git
 cd project_colyze
@@ -65,7 +64,6 @@ cd project_colyze
 
 - Backend (Python / Flask) kurulumu:
 
-powershell
 ```
 cd flask-server
 
@@ -87,7 +85,6 @@ Flask, flask-cors, opencv-python, opencv-contrib-python, numpy, pyodbc, py-tisgr
 
 - Frontend (React / Vite) kurulumu:
 
-powershell
 ```
 cd ..\colyze
 
@@ -99,7 +96,6 @@ npm ci lockfile kullanır, paket sürümlerinin tutarlı olmasını sağlar. Loc
 
 - Running the Project (Development) Backend:
 
-powershell
 ```
 cd flask-server
 .\colyze-flask-env\Scripts\Activate.ps1
@@ -108,7 +104,6 @@ python app.py
 
 Frontend:
 
-powershell
 ```
 cd colyze
 npm run dev
