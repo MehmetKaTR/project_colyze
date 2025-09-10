@@ -45,11 +45,64 @@ Project Colyze is a **web-based part measurement and inspection system** that co
 
 ### Prerequisites
 
-- Python 3.10+  
-- Flask  
-- OpenCV (`opencv-python`)  
-- Node.js 18+ (for frontend)  
-- React.js setup  
+- Python 3.11 (Windows için test edilmiş: 3.11.5)  
+- Node.js 18+ (LTS önerilir)  
+- Microsoft Access Database Engine (opsiyonel, Access DB kullanıyorsanız)  
+- Camera SDK DLL: `tisgrabber_x64.dll` (Windows kullanıcıları için)  
+- Git (repo’yu klonlamak için)  
+
+---
+
+### Installation & Setup (Windows)
+
+#### Repo’yu klonlayın:
+
+```powershell
+git clone https://github.com/MehmetKaTR/project_colyze.git
+cd project_colyze
+Backend (Python / Flask) kurulumu:
+powershell
+Copy code
+cd flask-server
+
+# Virtual environment oluştur
+python -m venv colyze-flask-env
+
+# Aktifleştir (PowerShell)
+.\colyze-flask-env\Scripts\Activate.ps1
+
+# pip güncelle
+python -m pip install --upgrade pip
+
+# Gereksinimleri yükle
+pip install -r requirements.txt
+Eğer requirements.txt yoksa, pip ile aşağıdaki paketleri yükleyebilirsiniz:
+Flask, flask-cors, opencv-python, opencv-contrib-python, numpy, pyodbc, py-tisgrabber, PyQt5 ve diğer listelenmiş paketler.
+
+Frontend (React / Vite) kurulumu:
+powershell
+Copy code
+cd ..\colyze
+
+# Node paketlerini yükle
+npm ci
+npm ci lockfile kullanır, paket sürümlerinin tutarlı olmasını sağlar. Lockfile yoksa npm install kullanabilirsiniz.
+
+Running the Project (Development)
+Backend:
+powershell
+Copy code
+cd flask-server
+.\colyze-flask-env\Scripts\Activate.ps1
+python app.py
+Frontend:
+powershell
+Copy code
+cd colyze
+npm run dev
+Frontend: http://localhost:5173/ (veya Vite config’de ayarladığınız path)
+
+Backend API: http://127.0.0.1:5000/
 
 
 
