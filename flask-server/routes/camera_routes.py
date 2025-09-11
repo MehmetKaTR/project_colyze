@@ -1,3 +1,7 @@
+from flask import Blueprint, Response, jsonify
+import cv2
+import numpy as np
+import os
 from flask import Blueprint, Response, jsonify, request
 import ctypes
 import tisgrabber as tis
@@ -11,68 +15,52 @@ import pyodbc
 import csv
 
 camera_bp = Blueprint('camera', __name__)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# DLL yolu
-dll_path = os.path.join(BASE_DIR, "tisgrabber_x64.dll")
-ic = ctypes.cdll.LoadLibrary(dll_path)
-tis.declareFunctions(ic)
-ic.IC_InitLibrary(0)
 
 camera = None
 
 def start_camera():
+    """Kamerayı başlatır."""
     global camera
     if camera is None:
-        camera = ic.IC_LoadDeviceStateFromFile(None, tis.T("./routes/devicef1.xml"))
-        if not ic.IC_IsDevValid(camera):
+        camera = cv2.VideoCapture(2)  # Linux’ta genellikle 0 ilk kameradır
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, 3072)   # 0 bazen kameranın native çözünürlüğü demek
+        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 2048)
+        if not camera.isOpened():
             camera = None
             return False
-        ic.IC_StartLive(camera, 1)
     return True
 
 def stop_camera():
+    """Kamerayı durdurur."""
     global camera
     if camera is not None:
-        ic.IC_StopLive(camera)
-        ic.IC_ReleaseGrabber(camera)
+        camera.release()
         camera = None
         return True
     return False
 
 def get_current_frame():
+    """Mevcut frame'i alır."""
     global camera
-    if camera is None or not ic.IC_IsDevValid(camera):
+    if camera is None:
         return None
 
-    # Görüntü açıklaması bilgilerini çek
-    Width = ctypes.c_long()
-    Height = ctypes.c_long()
-    BitsPerPixel = ctypes.c_int()
-    ColorFormat = ctypes.c_int()
-
-    ic.IC_GetImageDescription(camera, Width, Height, BitsPerPixel, ColorFormat)
-
-    width = Width.value
-    height = Height.value
-    bpp = BitsPerPixel.value // 8
-    buffer_size = width * height * bpp
-
-    # Görüntüyü al
-    if ic.IC_SnapImage(camera, 2000) == tis.IC_SUCCESS:
-        image_ptr = ic.IC_GetImagePtr(camera)
-
-        imagedata = ctypes.cast(image_ptr, ctypes.POINTER(ctypes.c_ubyte * buffer_size))
-
-        image = np.ndarray(buffer=imagedata.contents,
-                           dtype=np.uint8,
-                           shape=(height, width, bpp))
-
-        # OpenCV işlemleri
-        image = cv2.flip(image, 0)
-        return image
-    else:
+    ret, frame = camera.read()
+    if not ret:
         return None
+
+    # Gerekirse OpenCV ile işlemler yap
+    frame = cv2.flip(frame, 0)  # Orijinal scriptteki gibi ters çevirme
+    return frame
+
+def encode_frame_to_jpeg(frame):
+    """Frame'i JPEG formatına çevirir (HTTP üzerinden göstermek için)."""
+    ret, buffer = cv2.imencode('.jpg', frame)
+    if not ret:
+        return None
+    return buffer.tobytes()
+
+# -------------------- Flask Routes --------------------
 
 @camera_bp.route('/start_camera')
 def start_camera_route():
@@ -86,6 +74,16 @@ def stop_camera_route():
         return jsonify({'status': 'Camera stopped'})
     return jsonify({'error': 'Camera not running'}), 400
 
+@camera_bp.route('/current_frame')
+def current_frame_route():
+    frame = get_current_frame()
+    if frame is None:
+        return jsonify({'error': 'No frame available'}), 500
+
+    jpeg = encode_frame_to_jpeg(frame)
+    return Response(jpeg, mimetype='image/jpeg')
+
+
 @camera_bp.route('/save_frame', methods=['POST'])
 def save_frame():
     try:
@@ -97,19 +95,6 @@ def save_frame():
         datetime_str = data.get("datetime")
         results = data.get("results")
 
-        print("resultinyo", results)
-
-        # Format results (only for RGBI, not modifying structure)
-        if measure_type == "rgbi":
-            formatted_results = []
-            for r in results:
-                status_labels = ["OK" if s else "NOK" for s in r["each_status"]]
-                formatted_results.append({
-                    "id": r["id"],
-                    "each_status_labels": status_labels
-                })
-
-        # Check image data
         if not image_data_url:
             return jsonify({"error": "Image data missing"}), 400
 
@@ -120,14 +105,13 @@ def save_frame():
         if frame is None:
             return jsonify({'error': 'Invalid image data'}), 400
 
-        # Create temp dirs
+        # Create directories
         temp_frame_dir = Path("temp_frames")
         temp_frame_dir.mkdir(exist_ok=True)
-
         temp_text_dir = Path("temp_texts")
         temp_text_dir.mkdir(exist_ok=True)
 
-        # Create filename
+        # File naming
         if datetime_str:
             filename_base = f"{type_no}_{prog_no}_{datetime_str}_{measure_type}"
         else:
@@ -143,29 +127,24 @@ def save_frame():
         with open(text_path, "w", encoding="utf-8") as f:
             for r in results:
                 f.write(f"ID {r['id']}:\n")
-
                 if measure_type == "rgbi":
                     status_labels = ["OK" if s else "NOK" for s in r["each_status"]]
                     f.write(f"  R: {r['avg_r']:.2f} -> {status_labels[0]}\n")
                     f.write(f"  G: {r['avg_g']:.2f} -> {status_labels[1]}\n")
                     f.write(f"  B: {r['avg_b']:.2f} -> {status_labels[2]}\n")
                     f.write(f"  I: {r['intensity']:.2f} -> {status_labels[3]}\n")
-
                 elif measure_type == "histogram":
                     scores = r.get("scores", {})
                     f.write(f"  R_diff: {scores.get('R', 0):.4f}\n")
                     f.write(f"  G_diff: {scores.get('G', 0):.4f}\n")
                     f.write(f"  B_diff: {scores.get('B', 0):.4f}\n")
-
-                f.write(f"  RESULT: {r['status']}\n")
-                f.write("\n")
+                f.write(f"  RESULT: {r['status']}\n\n")
 
         return jsonify({"saved": True, "filename": f"{filename_base}.jpg"})
     except Exception as e:
         import traceback
         print("save_frame HATASI:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
-
 
 
 @camera_bp.route('/save_frame_with_polygons', methods=['POST'])
@@ -176,64 +155,51 @@ def save_frame_with_polygons():
         type_no = data.get("typeNo", "unknown")
         prog_no = data.get("progNo", "unknown")
         measure_type = data.get("measureType", "unknown").lower()
-        datetime_str = data.get("datetime")  
+        datetime_str = data.get("datetime")
         polygons = data.get("polygons", [])
-
-        print(polygons)
-        print("Tarih:", datetime_str)
-        print("Poligon sayısı:", len(polygons))
 
         if not image_data_url:
             return jsonify({"error": "Image data missing"}), 400
 
-        # Görüntüyü base64'ten çöz
+        # Decode image
         header, encoded = image_data_url.split(",", 1)
         image_bytes = base64.b64decode(encoded)
         frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             return jsonify({'error': 'Invalid image data'}), 400
 
-        # Üzerine çizim için overlay (alpha karışımı için)
         overlay = frame.copy()
-        print("görelim bakalım",polygons)
 
         for polygon in polygons:
             points = polygon.get("points", [])
             status = polygon.get("status", "").upper()
-
             if len(points) < 3:
                 continue
 
-            pts = np.array([[int(p['x']), int(p['y'])] for p in points], np.int32).reshape((-1, 1, 2))
+            pts = np.array([[int(p['x']), int(p['y'])] for p in points], np.int32).reshape((-1,1,2))
 
-            # Renk ve alpha belirle
+            # Renk ve alpha
             if status == "OK":
-                fill_color = (69, 230, 16)  # BGR (Yeşil parlak)
+                fill_color = (69, 230, 16)
                 alpha = 0.4
             elif status == "NOK":
-                fill_color = (36, 36, 192)  # BGR (Kırmızı parlak)
+                fill_color = (36, 36, 192)
                 alpha = 0.86
             else:
                 fill_color = None
                 alpha = 0.0
 
-            # Beyaz sınır çiz (her durumda)
-            cv2.polylines(frame, [pts], isClosed=True, color=(255, 255, 255), thickness=2)
+            # Sınır çiz
+            cv2.polylines(frame, [pts], isClosed=True, color=(255,255,255), thickness=2)
 
-            # İçini doldur (alpha ile)
+            # İçini doldur
             if fill_color and alpha > 0:
                 cv2.fillPoly(overlay, [pts], fill_color)
 
-            # Polygon ortasını hesapla (yazı için)
+            # Polygon ID yaz
             M = cv2.moments(pts)
-            if M["m00"] != 0:
-                cX = int(M["m10"] / M["m00"])
-                cY = int(M["m01"] / M["m00"])
-            else:
-                cX, cY = pts[0][0][0], pts[0][0][1]
-
-            # Polygon ID'sini yaz (beyaz, okunaklı)
-            poly_id = str(polygon.get("id", ""))
+            cX, cY = (int(M["m10"]/M["m00"]), int(M["m01"]/M["m00"])) if M["m00"] != 0 else (pts[0][0][0], pts[0][0][1])
+            poly_id = str(polygon.get("id",""))
             font = cv2.FONT_HERSHEY_SIMPLEX
             font_scale = 0.7
             thickness = 2
@@ -241,17 +207,14 @@ def save_frame_with_polygons():
             text_w, text_h = text_size
             text_x = cX - text_w // 2
             text_y = cY + text_h // 2
+            cv2.putText(frame, poly_id, (text_x, text_y), font, font_scale, (255,255,255), thickness, lineType=cv2.LINE_AA)
 
-            cv2.putText(frame, poly_id, (text_x, text_y), font, font_scale, (255, 255, 255), thickness, lineType=cv2.LINE_AA)
+        cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0, frame)
 
-        # Alpha blending ile doldurma işlemi
-        cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
-
-        # Kaydetme dizini
+        # Kaydetme
         temp_dir = Path("temp_frames")
         temp_dir.mkdir(exist_ok=True)
 
-        # Dosya ismi
         if datetime_str:
             filename = f"{type_no}_{prog_no}_{datetime_str}_{measure_type}.jpg"
         else:
@@ -264,7 +227,7 @@ def save_frame_with_polygons():
         return jsonify({"saved": True, "filename": filename})
     except Exception as e:
         import traceback
-        print("save_frame HATASI:\n", traceback.format_exc())
+        print("save_frame_with_polygons HATASI:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 
@@ -321,71 +284,61 @@ def live_camera():
     return jsonify({'image': img_uri})
 
 
-
 @camera_bp.route('/ic4_xml_save')
 def device_xml_save():
-    hGrabber = ic.IC_ShowDeviceSelectionDialog(None)
+    # Mevcut ayarları kaydet
+    camera_settings_file = Path("./routes/devicef1.json")
+    
+    settings = {}
+    cap = cv2.VideoCapture(2)
+    if not cap.isOpened():
+        return jsonify({"status": "error", "message": "Kamera açılamadı."}), 500
 
-    if ic.IC_IsDevValid(hGrabber):
-        ic.IC_SaveDeviceStateToFile(hGrabber, tis.T("./routes/device.xml"))
-        response = {"status": "success", "message": "Ayarlar device.xml olarak kaydedildi."}
-    else:
-        ic.IC_MsgBox(tis.T("No device opened"), tis.T("Simple Live Video"))
-        response = {"status": "error", "message": "Cihaz açık değil veya geçersiz."}
+    settings['frame_width'] = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    settings['frame_height'] = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    settings['exposure'] = cap.get(cv2.CAP_PROP_EXPOSURE)
+    settings['gain'] = cap.get(cv2.CAP_PROP_GAIN)
+    settings['focus'] = cap.get(cv2.CAP_PROP_FOCUS)
 
-    ic.IC_ReleaseGrabber(hGrabber)
-    return jsonify(response)
+    camera_settings_file.parent.mkdir(exist_ok=True)
+    with open(camera_settings_file, "w") as f:
+        json.dump(settings, f, indent=4)
+
+    cap.release()
+    return jsonify({"status": "success", "message": f"Ayarlar {camera_settings_file} olarak kaydedildi."})
+
 
 @camera_bp.route('/ic4_configure')
 def configure_camera_properties():
-    hGrabber = ic.IC_ShowDeviceSelectionDialog(None)
+    cap = cv2.VideoCapture(2)
+    if not cap.isOpened():
+        return jsonify({"status": "error", "message": "Kamera açılamadı."}), 500
 
-    if not ic.IC_IsDevValid(hGrabber):
-        ic.IC_ReleaseGrabber(hGrabber)
-        return jsonify({"status": "error", "message": "No device opened."})
+    # Exposure, gain, focus değerleri alınabilir veya değiştirilir
+    # Örnek: exposure manuel ayarlama (varsa)
+    cap.set(cv2.CAP_PROP_EXPOSURE, -5)  # Linux/Windows değer farklı olabilir
+    cap.set(cv2.CAP_PROP_GAIN, 0)
+    cap.set(cv2.CAP_PROP_FOCUS, 0)
 
-    # Exposure Auto bilgisi alınıyor
-    exposureauto = ctypes.c_long()
-    ic.IC_SetPropertySwitch(hGrabber, tis.T("Exposure"), tis.T("Auto"), exposureauto)
-    auto_exposure_value = exposureauto.value
+    # Mevcut değerleri oku
+    settings = {
+        "exposure": cap.get(cv2.CAP_PROP_EXPOSURE),
+        "gain": cap.get(cv2.CAP_PROP_GAIN),
+        "focus": cap.get(cv2.CAP_PROP_FOCUS),
+        "frame_width": cap.get(cv2.CAP_PROP_FRAME_WIDTH),
+        "frame_height": cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    }
 
-    # Auto kapat, manuel exposure değeri ayarla
-    ic.IC_SetPropertySwitch(hGrabber, tis.T("Exposure"), tis.T("Auto"), 0)
-    ic.IC_SetPropertyAbsoluteValue(hGrabber, tis.T("Exposure"), tis.T("Value"), ctypes.c_float(0.0303))
+    # Ayarları JSON dosyasına kaydet
+    camera_settings_file.parent.mkdir(exist_ok=True)
+    with open(camera_settings_file, "w") as f:
+        json.dump(settings, f, indent=4)
 
-    # Exposure değerini ve aralığını al
-    expmin = ctypes.c_float()
-    expmax = ctypes.c_float()
-    exposure = ctypes.c_float()
-    ic.IC_GetPropertyAbsoluteValue(hGrabber, tis.T("Exposure"), tis.T("Value"), exposure)
-    ic.IC_GetPropertyAbsoluteValueRange(hGrabber, tis.T("Exposure"), tis.T("Value"), expmin, expmax)
-
-    # Gain bilgisi
-    gainmin = ctypes.c_long()
-    gainmax = ctypes.c_long()
-    gain = ctypes.c_long()
-    ic.IC_GetPropertyValue(hGrabber, tis.T("Gain"), tis.T("Value"), gain)
-    ic.IC_GetPropertyValueRange(hGrabber, tis.T("Gain"), tis.T("Value"), gainmin, gainmax)
-
-    # Focus denemesi
-    focus_result = ic.IC_PropertyOnePush(hGrabber, tis.T("Focus"), tis.T("One Push"))
-    focus_message = "Focus ayarlandı." if focus_result != -4 else "Kamera Focus özelliğini desteklemiyor."
-
-    # ✅ Ayarları XML olarak kaydet (otomatik)
-    xml_path = tis.T("./routes/devicef1.xml")
-    ic.IC_SaveDeviceStateToFile(hGrabber, xml_path)
-
-    ic.IC_ReleaseGrabber(hGrabber)
-
+    cap.release()
     return jsonify({
         "status": "success",
-        "exposure_auto": auto_exposure_value,
-        "exposure": exposure.value,
-        "exposure_range": [expmin.value, expmax.value],
-        "gain": gain.value,
-        "gain_range": [gainmin.value, gainmax.value],
-        "focus_message": focus_message,
-        "xml_saved_to": "./routes/devicef1.xml"
+        **settings,
+        "settings_saved_to": str("./routes/devicef1.json")
     })
 
 # =================== Calculate Methods =====================

@@ -14,7 +14,7 @@ dist/
 
 # Python virtualenv
 venv/
-flask-server/colyze-flask-env/
+flask-server/colyze-flask-env-linux/
 
 # __pycache__ ve diğer Python artıkları
 __pycache__/
