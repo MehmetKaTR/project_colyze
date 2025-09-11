@@ -6,75 +6,63 @@ export const Navbar = ({ menuOpen, setMenuOpen, setActiveTab }) => {
   }, [menuOpen]);
 
   return (
-    <nav className="fixed top-0 w-full z-40 bg-[rgba(10, 10, 10, 0.8)] backdrop-blur-lg border-b border-white/10 shadow-lg">
-      <div className="max-w-5xl mx-auto px-4">
-        <div className="flex justify-between items-center h-16">
+    <nav className="fixed top-0 w-full z-50 bg-white shadow-md flex items-center h-14">
+      {/* Logo ve drag alanı */}
+      <div
+        className="flex-1 flex items-center px-16 cursor-move"
+        style={{ WebkitAppRegion: 'drag' }}
+      >
+        <a
+          href="#auto"
+          className="font-mono text-lg font-bold text-blue-500"
+          onClick={(e) => {
+            e.preventDefault();
+            setActiveTab("auto");
+            setMenuOpen(false);
+          }}
+        >
+          Colyze
+        </a>
+      </div>
+
+      {/* Desktop menü */}
+      <div className="hidden md:flex items-center space-x-6">
+        {["auto","f1","f2","report"].map((tab) => (
           <a
-            href="#auto"
-            className="font-mono text-xl font-bold text-white"
+            key={tab}
+            href={`#${tab}`}
+            className="text-blue-500 hover:bg-gray-300 transition-colors"
             onClick={(e) => {
               e.preventDefault();
-              setActiveTab("auto");
+              setActiveTab(tab);
               setMenuOpen(false);
             }}
           >
-            <span className="text-blue-500">Colyze</span>
+            {tab.toUpperCase()}
           </a>
+        ))}
+      </div>
 
+      {/* Pencere kontrol divleri */}
+      <div className="flex space-x-1 px-2" style={{ WebkitAppRegion: 'no-drag' }}>
+        {[
+          { action: "minimize", symbol: "—" },
+          { action: "maximize", symbol: "□" },
+          { action: "close", symbol: "×" }
+        ].map(({ action, symbol }) => (
           <div
-            className="w-7 h-5 relative cursor-pointer z-40 md:hidden text-blue-900"
-            onClick={() => setMenuOpen((prev) => !prev)}
+            key={action}
+            onClick={() => {
+              if(action === "minimize") window.electron.minimize();
+              if(action === "maximize") window.electron.maximize();
+              if(action === "close") window.electron.close();
+            }}
+            className="w-6 h-6 bg-gray-200 hover:bg-gray-300 rounded flex items-center justify-center text-gray-800 text-sm cursor-pointer transition-colors duration-200"
+            title={action.charAt(0).toUpperCase() + action.slice(1)}
           >
-            &#9776;
+            {symbol}
           </div>
-
-          <div className="hidden md:flex items-center space-x-8">
-            <a
-              href="#auto"
-              className="text-blue-500 hover:text-white transition-colors"
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveTab("auto");
-                setMenuOpen(false);
-              }}
-            >
-              AUTO
-            </a>
-            <a
-              href="#f1"
-              className="text-blue-500 hover:text-white transition-colors"
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveTab("f1");
-                setMenuOpen(false);
-              }}
-            >
-              F1 PARAMETER
-            </a>
-            <a
-              href="#f2"
-              className="text-blue-500 hover:text-white transition-colors"
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveTab("f2");
-                setMenuOpen(false);
-              }}
-            >
-              F2 PARAMETER
-            </a>
-            <a
-              href="#report"
-              className="text-blue-500 hover:text-white transition-colors"
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveTab("report");
-                setMenuOpen(false);
-              }}
-            >
-              REPORT
-            </a>
-          </div>
-        </div>
+        ))}
       </div>
     </nav>
   );

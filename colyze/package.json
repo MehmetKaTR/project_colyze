@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start": "electron .",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -36,6 +37,7 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^38.1.0",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
@@ -44,7 +46,7 @@
     "vite": "^6.2.0"
   },
   "description": "This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.",
-  "main": "eslint.config.js",
+  "main": "main.cjs",
   "keywords": [],
   "author": "",
   "license": "ISC"

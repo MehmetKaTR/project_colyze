@@ -1,11 +1,12 @@
 from flask import Blueprint, jsonify, request
-import os
-import datetime
 from pathlib import Path
 
 auto_bp = Blueprint("auto", __name__)
 
-TEMP_FRAMES_DIR = Path("temp_frames")
+# app.py'nin klasörü baz alınarak temp dizinlerini belirle
+BASE_DIR = Path(__file__).resolve().parent.parent  # routes klasöründen bir üst klasöre
+TEMP_FRAMES_DIR = BASE_DIR / "temp_frames"
+TEMP_TEXTS_DIR = BASE_DIR / "temp_texts"
 
 @auto_bp.route("/auto_frames", methods=["GET"])
 def get_auto_frames():
@@ -15,39 +16,33 @@ def get_auto_frames():
 
         frame_data = []
         for file in TEMP_FRAMES_DIR.iterdir():
-            if file.suffix.lower() not in [".jpg", ".jpeg", ".png"]:  # İzin verilen formatlar
+            if file.suffix.lower() not in [".jpg", ".jpeg", ".png"]:
                 continue
 
-            filename = file.stem  # dosya adını uzantısız al
-            try:
-                # Beklenen format: typeNo_progNo_datetime_measureType
-                parts = filename.split("_")
-                if len(parts) < 4:
-                    continue
-
-                type_no = parts[0]
-                prog_no = parts[1]
-                dt_str = parts[2]  # örnek: 8.07.2025
-                time_str = parts[3]  # örnek: 10:45:14.7690000
-                measure_type = parts[4] if len(parts) > 4 else "unknown"
-
-                frame_data.append({
-                    "typeNo": type_no,
-                    "progNo": prog_no,
-                    "datetime": f"{dt_str} {time_str}",
-                    "measureType": measure_type,
-                    "filename": file.name,
-                    "path": f"/frames/{file.name}"
-                })
-            except Exception as parse_err:
-                print(f"Dosya adından veri çözümlenemedi: {filename}", parse_err)
+            filename = file.stem
+            parts = filename.split("_")
+            if len(parts) < 4:
                 continue
+
+            type_no = parts[0]
+            prog_no = parts[1]
+            dt_str = parts[2]
+            time_str = parts[3]
+            measure_type = parts[4] if len(parts) > 4 else "unknown"
+
+            frame_data.append({
+                "typeNo": type_no,
+                "progNo": prog_no,
+                "datetime": f"{dt_str} {time_str}",
+                "measureType": measure_type,
+                "filename": file.name,
+                "path": f"/frames/{file.name}"
+            })
 
         return jsonify(frame_data)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
 
 @auto_bp.route("/auto_result_text", methods=["GET"])
 def get_result_text():
@@ -57,7 +52,7 @@ def get_result_text():
             return jsonify({"error": "filename is required"}), 400
 
         filename_base = Path(filename).stem
-        txt_path = Path("temp_texts") / f"{filename_base}.txt"
+        txt_path = TEMP_TEXTS_DIR / f"{filename_base}.txt"
 
         if not txt_path.exists():
             return jsonify({"error": "Result file not found"}), 404
@@ -68,5 +63,3 @@ def get_result_text():
         return jsonify({"result_lines": lines})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
