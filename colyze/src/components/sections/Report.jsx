@@ -79,7 +79,7 @@ export const Report = () => {
               className="w-full text-center rounded border text-black"
             >
               <option value="">Seçiniz</option>
-              <option value="HIST">HIST</option>
+              <option value="Histogram">HIST</option>
               <option value="RGBI">RGBI</option>
             </select>
             <div className="flex items-center justify-center text-black">MEASURE TYPE</div>

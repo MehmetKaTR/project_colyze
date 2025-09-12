@@ -1,130 +1,121 @@
-import base64
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
-import traceback
-from pathlib import Path
-import pyodbc
+import base64
+from db.models import Session, TypesF1, PolySettingsF1, ToolsF1, Results, HistTeach, TypeImages, RGBITeach
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, BigInteger
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 db_bp = Blueprint('db', __name__)
-TEMP_FRAMES_DIR = Path("temp_frames")
 
-# Access veritabanı bağlantısı
-db_path = r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\AccessDBS\colyze.accdb"  # ← Burayı kendine göre düzelt
-conn_str = (
-    r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
-    fr'DBQ={db_path};'
-)
-
-conn = pyodbc.connect(conn_str)
-cursor = conn.cursor()
+# Session helper
+def get_session():
+    return Session()
 
 # =================== TypesF1 =====================
 @db_bp.route('/types', methods=['POST'])
 def insert_type():
     data = request.json
-    cursor.execute("""
-        INSERT INTO TypesF1 (
-            TypeNo, ProgNo, ProgName, RectX, RectY, RectW, RectH
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (
-        data['TypeNo'], data['ProgNo'], data['ProgName'],
-        data['RectX'], data['RectY'], data['RectW'], data['RectH']
-    ))
-    conn.commit()
+    session = get_session()
+    new_type = TypesF1(
+        TypeNo=data['TypeNo'],
+        ProgNo=data['ProgNo'],
+        ProgName=data['ProgName'],
+    )
+    session.add(new_type)
+    session.commit()
     return jsonify({'message': 'TypesF1 eklendi'})
 
 
-@db_bp.route('/types', methods=['GET'])
+"""@db_bp.route('/types', methods=['GET'])
 def get_types():
-    cursor.execute("SELECT * FROM TypesF1")
-    rows = cursor.fetchall()
-    columns = [col[0] for col in cursor.description]
-    result = [dict(zip(columns, row)) for row in rows]
-    return jsonify(result)
+    session = get_session()
+    types = session.query(TypesF1).all()
+    result = [t.as_dict() for t in types]
+    return jsonify(result)"""
 
 
 # =================== PolySettingsF1 =====================
 @db_bp.route('/polysettings', methods=['POST'])
 def insert_polysettings():
     data = request.json
-    cursor.execute("""
-        INSERT INTO PolySettingsF1 (
-            TypeNo, ProgNo, ToolNo, Gain, Exposure,
-            [R Mın], [R Max], [G Min], [G Max],
-            [B Min], [B Max], [I Min], [I Max]
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        data['TypeNo'], data['ProgNo'], data['ToolNo'],
-        data['Gain'], data['Exposure'],
-        data['RMin'], data['RMax'], data['GMin'], data['GMax'],
-        data['BMin'], data['BMax'], data['IMin'], data['IMax']
-    ))
-    conn.commit()
+    session = get_session()
+    new_poly = PolySettingsF1(
+        TypeNo=data['TypeNo'],
+        ProgNo=data['ProgNo'],
+        ToolNo=data['ToolNo'],
+        Gain=data['Gain'],
+        Exposure=data['Exposure'],
+        RMin=data['RMin'], RMax=data['RMax'],
+        GMin=data['GMin'], GMax=data['GMax'],
+        BMin=data['BMin'], BMax=data['BMax'],
+        IMin=data['IMin'], IMax=data['IMax']
+    )
+    session.add(new_poly)
+    session.commit()
     return jsonify({'message': 'PolySettingsF1 eklendi'})
-
 
 @db_bp.route('/polysettings', methods=['GET'])
 def get_polysettings():
-    cursor.execute("SELECT * FROM PolySettingsF1")
-    rows = cursor.fetchall()
-    columns = [col[0] for col in cursor.description]
-    result = [dict(zip(columns, row)) for row in rows]
+    session = get_session()
+    poly = session.query(PolySettingsF1).all()
+    result = [p.as_dict() for p in poly]
     return jsonify(result)
-
 
 # =================== ToolsF1 =====================
 @db_bp.route('/tools', methods=['POST'])
 def insert_tool():
     data = request.json
-    cursor.execute("""
-        INSERT INTO ToolsF1 (
-            TypeNo, ProgNo, ToolNo, CornerNo, x
-        ) VALUES (?, ?, ?, ?, ?)
-    """, (
-        data['TypeNo'], data['ProgNo'],
-        data['ToolNo'], data['CornerNo'], data['x']
-    ))
-    conn.commit()
+    session = get_session()
+    new_tool = ToolsF1(
+        TypeNo=data['TypeNo'],
+        ProgNo=data['ProgNo'],
+        ToolNo=data['ToolNo'],
+        CornerNo=data['CornerNo'],
+        X=data['x'],
+        Y=data['y']
+    )
+    session.add(new_tool)
+    session.commit()
     return jsonify({'message': 'ToolsF1 eklendi'})
-
 
 @db_bp.route('/tools', methods=['GET'])
 def get_tools():
-    cursor.execute("SELECT * FROM ToolsF1")
-    rows = cursor.fetchall()
-    columns = [col[0] for col in cursor.description]
-    result = [dict(zip(columns, row)) for row in rows]
+    session = get_session()
+    tools = session.query(ToolsF1).all()
+    result = [t.as_dict() for t in tools]
     return jsonify(result)
 
-
+# =================== Results =====================
 @db_bp.route('/results', methods=['POST'])
 def insert_result():
     data = request.json
+    session = get_session()
     dt = datetime.strptime(data['DateTime'], "%Y-%m-%d %H:%M:%S")
-
-    cursor.execute("""
-        INSERT INTO Results (
-            [DateTime], [TypeNo], [ProgNo], [ToolNo], [R], [G], [B], [I], [OK_NOK]
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        dt, data['TypeNo'],
-        data['ProgNo'], data['ToolNo'], 
-        data['R'], data['G'], data['B'], data['I'], 
-        data['OK_NOK']
-    ))
-    conn.commit()
+    new_res = Results(
+        DateTime=dt,
+        TypeNo=data['TypeNo'],
+        ProgNo=data['ProgNo'],
+        ToolNo=data['ToolNo'],
+        R=data['R'],
+        G=data['G'],
+        B=data['B'],
+        I=data['I'],
+        OK_NOK=data['OK_NOK']
+    )
+    session.add(new_res)
+    session.commit()
     return jsonify({'message': 'Results eklendi'})
 
 
 @db_bp.route('/results', methods=['GET'])
 def get_results():
-    cursor.execute("SELECT * FROM Results")
-    rows = cursor.fetchall()
-    columns = [col[0] for col in cursor.description]
-    result = [dict(zip(columns, row)) for row in rows]
+    session = get_session()
+    results = session.query(Results).all()
+    result = [r.as_dict() for r in results]
     return jsonify(result)
 
 
+# =================== Tools by Type & Prog =====================
 @db_bp.route('/tools_by_typeprog', methods=['GET'])
 def get_tools_by_typeprog():
     type_no = request.args.get('typeNo', type=int)
@@ -133,24 +124,20 @@ def get_tools_by_typeprog():
     if type_no is None or prog_no is None:
         return jsonify({'error': 'Eksik parametre'}), 400
 
-    cursor.execute("""
-        SELECT ToolNo, CornerNo, X, Y 
-        FROM ToolsF1 
-        WHERE TypeNo = ? AND ProgNo = ?
-        ORDER BY ToolNo, CornerNo
-    """, (type_no, prog_no))
+    session = get_session()
+    tools_query = session.query(ToolsF1).filter_by(TypeNo=type_no, ProgNo=prog_no).order_by(ToolsF1.ToolNo, ToolsF1.CornerNo).all()
 
-    rows = cursor.fetchall()
     tools = {}
+    for t in tools_query:
+        if t.ToolNo not in tools:
+            tools[t.ToolNo] = []
+        tools[t.ToolNo].append({'x': t.X, 'y': t.Y})
 
-    for tool_no, corner_no, x, y in rows:
-        if tool_no not in tools:
-            tools[tool_no] = []
-        tools[tool_no].append({'x': x, 'y': y})
-
-    result = [{'id': tool_no, 'points': points, 'status' : 'empty'} for tool_no, points in tools.items()]
+    result = [{'id': tool_no, 'points': points, 'status': 'empty'} for tool_no, points in tools.items()]
     return jsonify(result)
 
+
+# =================== Update Polygons =====================
 @db_bp.route('/update-polygons', methods=['POST'])
 def update_polygons():
     data = request.get_json()
@@ -158,62 +145,50 @@ def update_polygons():
     prog_no = data['progNo']
     polygons = data['polygons']
 
-    # 🔥 1. Eski verileri tamamen sil
-    cursor.execute("""
-        DELETE FROM ToolsF1 WHERE TypeNo = ? AND ProgNo = ?
-    """, (type_no, prog_no))
+    session = get_session()
 
-    cursor.execute("""
-        DELETE FROM HistTeach WHERE TypeNo = ? AND ProgNo = ?
-    """, (type_no, prog_no))
+    # 1️⃣ Eski verileri sil
+    session.query(ToolsF1).filter_by(TypeNo=type_no, ProgNo=prog_no).delete()
+    session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no).delete()
 
-    # 🔄 2. Gelen güncel polygon listesini yaz
+    # 2️⃣ Yeni polygon verilerini ekle
     for polygon in polygons:
         tool_no = polygon['id']
         points = polygon['points']
-
         for idx, point in enumerate(points):
-            cursor.execute("""
-                INSERT INTO ToolsF1 (TypeNo, ProgNo, ToolNo, CornerNo, X, Y)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                type_no,
-                prog_no,
-                tool_no,
-                idx + 1,
-                point['x'],
-                point['y']
-            ))
+            new_tool = ToolsF1(
+                TypeNo=type_no,
+                ProgNo=prog_no,
+                ToolNo=tool_no,
+                CornerNo=idx + 1,
+                X=point['x'],
+                Y=point['y']
+            )
+            session.add(new_tool)
 
-    conn.commit()
+    session.commit()
     return jsonify({"message": "Polygons updated"})
 
 
+# =================== Delete Polygon =====================
 @db_bp.route('/delete-polygon', methods=['POST'])
 def delete_polygon():
-    try:
-        data = request.get_json()
-        type_no = data['typeNo']
-        prog_no = data['progNo']
-        tool_id = data['toolId']  # frontend'den gelen polygon id'si
+    data = request.get_json()
+    type_no = data['typeNo']
+    prog_no = data['progNo']
+    tool_id = data['toolId']
 
-        # ToolsF1 tablosundan sil
-        cursor.execute("""
-            DELETE FROM ToolsF1
-            WHERE TypeNo = ? AND ProgNo = ? AND ToolNo = ?
-        """, (type_no, prog_no, tool_id))
-        # HistTeach tablosundan sil
-        cursor.execute("""
-            DELETE FROM HistTeach
-            WHERE TypeNo = ? AND ProgNo = ? AND Tool_ID = ?
-        """, (type_no, prog_no, tool_id))
-        conn.commit()
+    session = get_session()
+
+    # Önce ToolsF1 kontrol et
+    tool_exists = session.query(ToolsF1).filter_by(TypeNo=type_no, ProgNo=prog_no, ToolNo=tool_id).count()
+    if tool_exists:
+        session.query(ToolsF1).filter_by(TypeNo=type_no, ProgNo=prog_no, ToolNo=tool_id).delete()
+        session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no, Tool_ID=tool_id).delete()
+        session.commit()
         return jsonify({"message": f"Polygon {tool_id} veritabanından silindi."})
-
-    except Exception as e:
-        import traceback
-        print("🔴 DELETE POLYGON HATASI:\n", traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
+    else:
+        return jsonify({"message": f"Polygon {tool_id} bulunamadı, silme işlemi yapılmadı."})
 
 
 # =================== TypeImages =====================
@@ -227,155 +202,122 @@ def insert_or_update_type_rect():
     rect_w = data['RectW']
     rect_h = data['RectH']
 
-    # Önce var mı kontrol et
-    cursor.execute("""
-        SELECT COUNT(*) FROM TypeImages WHERE TypeNo = ? AND ProgramNo = ?
-    """, (type_no, prog_no))
-    exists = cursor.fetchone()[0]
+    session = get_session()
+    type_img = session.query(TypeImages).filter_by(TypeNo=type_no, ProgramNo=prog_no).first()
 
-    if exists:
-        # Kayıt varsa güncelle
-        cursor.execute("""
-            UPDATE TypeImages
-            SET RectX = ?, RectY = ?, RectW = ?, RectH = ?
-            WHERE TypeNo = ? AND ProgramNo = ?
-        """, (rect_x, rect_y, rect_w, rect_h, type_no, prog_no))
+    if type_img:
+        type_img.RectX = rect_x
+        type_img.RectY = rect_y
+        type_img.RectW = rect_w
+        type_img.RectH = rect_h
         message = 'Crop koordinatları güncellendi'
     else:
-        # Yoksa yeni kayıt ekle
-        cursor.execute("""
-            INSERT INTO TypeImages (TypeNo, ProgramNo, RectX, RectY, RectW, RectH)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (type_no, prog_no, rect_x, rect_y, rect_w, rect_h))
+        type_img = TypeImages(
+            TypeNo=type_no,
+            ProgramNo=prog_no,
+            RectX=rect_x,
+            RectY=rect_y,
+            RectW=rect_w,
+            RectH=rect_h
+        )
+        session.add(type_img)
         message = 'Crop koordinatları kaydedildi'
 
-    conn.commit()
+    session.commit()
     return jsonify({'message': message})
 
 
 
 @db_bp.route('/type-rect', methods=['GET'])
 def get_type_rects():
-    cursor.execute("SELECT * FROM TypeImages")
-    rows = cursor.fetchall()
-    columns = [col[0] for col in cursor.description]
-    result = [dict(zip(columns, row)) for row in rows]
+    session = get_session()
+    rects = session.query(TypeImages).all()
+    result = [r.as_dict() for r in rects]
     return jsonify(result)
 
 
 # =================== HistTeach =====================
 @db_bp.route('/save_histogram', methods=['POST'])
 def save_histogram():
-    try:
-        data = request.get_json()
+    data = request.get_json()
+    type_no = data.get("typeNo")
+    prog_no = data.get("progNo")
+    tool_id = data.get("toolId")
+    histogram = data.get("histogram")
 
-        type_no = data.get("typeNo")
-        prog_no = data.get("progNo")
-        tool_id = data.get("toolId")
-        histogram = data.get("histogram")  # {'r': [...], 'g': [...], 'b': [...]}
+    if not all([type_no, prog_no, tool_id, histogram]):
+        return jsonify({"error": "Eksik veri"}), 400
 
-        if not all([type_no, prog_no, tool_id, histogram]):
-            return jsonify({"error": "Eksik veri"}), 400
+    session = get_session()
+    # Önce eski verileri sil
+    session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no, Tool_ID=tool_id).delete()
 
+    # Yeni veriyi ekle
+    for channel in ['r', 'g', 'b']:
+        for i, val in enumerate(histogram[channel]):
+            hist = HistTeach(
+                TypeNo=type_no,
+                ProgNo=prog_no,
+                Tool_ID=str(tool_id),
+                Channel=channel.upper(),
+                Bin_Index=i,
+                Values=float(val)
+            )
+            session.add(hist)
 
-        # Önce var mı diye bak, varsa sil
-        cursor.execute("""
-            DELETE FROM HistTeach
-            WHERE TypeNo=? AND ProgNo=? AND Tool_ID=?
-        """, (type_no, prog_no, tool_id))
-
-        # Sonra yeniden ekle
-        for channel in ['r', 'g', 'b']:
-            for i, val in enumerate(histogram[channel]):
-                cursor.execute("""
-                    INSERT INTO HistTeach (TypeNo, ProgNo, Tool_ID, Channel, Bin_Index, [Values])
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (type_no, prog_no, tool_id, channel.upper(), i, float(val)))
-
-        conn.commit()
-        return jsonify({"status": "OK", "message": "Teach histogram güncellendi"})
-    
-    except Exception as e:
-        import traceback
-        print("🔴 Histogram kayıt hatası:\n", traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
+    session.commit()
+    return jsonify({"status": "OK", "message": "Teach histogram güncellendi"})
 
 
 @db_bp.route('/get_histogram_teach')
 def get_histograms():
-    try:
-        type_no = request.args.get("typeNo")
-        prog_no = request.args.get("progNo")
+    type_no = request.args.get("typeNo")
+    prog_no = request.args.get("progNo")
 
-        if not type_no or not prog_no:
-            return jsonify({"error": "Eksik parametre"}), 400
+    if not type_no or not prog_no:
+        return jsonify({"error": "Eksik parametre"}), 400
 
-        cursor.execute("""
-            SELECT Tool_ID, Channel, Bin_Index, [Values] 
-            FROM HistTeach
-            WHERE TypeNo=? AND ProgNo=?
-            ORDER BY Tool_ID, Channel, Bin_Index
-        """, (type_no, prog_no))
+    session = get_session()
+    rows = session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no).order_by(HistTeach.Tool_ID, HistTeach.Channel, HistTeach.Bin_Index).all()
 
-        data = {}
-        for tool_id, channel, bin_index, value in cursor.fetchall():
-            key = str(tool_id)
-            if key not in data:
-                data[key] = {"r": [0]*256, "g": [0]*256, "b": [0]*256}
-            ch = channel.lower()
-            data[key][ch][int(bin_index)] = float(value)
+    data = {}
+    for row in rows:
+        key = str(row.Tool_ID)
+        if key not in data:
+            data[key] = {"r": [0]*256, "g": [0]*256, "b": [0]*256}
+        data[key][row.Channel.lower()][row.Bin_Index] = float(row.Values)
 
-        response = []
-        for tool_id, hist in data.items():
-            response.append({
-                "toolId": tool_id,
-                "histogram": hist
-            })
-
-        return jsonify(response)
-
-    except Exception as e:
-        import traceback
-        print("🔴 get_histograms HATASI:\n", traceback.format_exc())
-        return jsonify({ "error": str(e) }), 500
+    response = [{"toolId": tool_id, "histogram": hist} for tool_id, hist in data.items()]
+    return jsonify(response)
 
 
+
+# =================== RGBITeach =====================
 @db_bp.route('/get_rgbi_teach')
 def get_rgbi_teach():
-    try:
-        type_no = request.args.get("typeNo")
-        prog_no = request.args.get("progNo")
+    type_no = request.args.get("typeNo")
+    prog_no = request.args.get("progNo")
 
-        if not type_no or not prog_no:
-            return jsonify({"error": "Eksik parametre"}), 400
+    if not type_no or not prog_no:
+        return jsonify({"error": "Eksik parametre"}), 400
 
-        cursor.execute("""
-            SELECT Tool_ID, R_Min, R_Max, G_Min, G_Max, B_Min, B_Max, I_Min, I_Max
-            FROM RGBITeach
-            WHERE TypeNo=? AND ProgNo=?
-            ORDER BY Tool_ID
-        """, (type_no, prog_no))
+    session = get_session()
+    rows = session.query(RGBITeach).filter_by(TypeNo=type_no, ProgNo=prog_no).order_by(RGBITeach.Tool_ID).all()
 
-        data = []
-        for row in cursor.fetchall():
-            data.append({
-                "toolId": str(row.Tool_ID),
-                "rMin": row.R_Min,
-                "rMax": row.R_Max,
-                "gMin": row.G_Min,
-                "gMax": row.G_Max,
-                "bMin": row.B_Min,
-                "bMax": row.B_Max,
-                "iMin": row.I_Min,
-                "iMax": row.I_Max,
-            })
-
-        return jsonify(data)
-
-    except Exception as e:
-        import traceback
-        print("🔴 get_rgbi_teach HATASI:\n", traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
+    data = []
+    for row in rows:
+        data.append({
+            "toolId": str(row.Tool_ID),
+            "rMin": row.R_Min,
+            "rMax": row.R_Max,
+            "gMin": row.G_Min,
+            "gMax": row.G_Max,
+            "bMin": row.B_Min,
+            "bMax": row.B_Max,
+            "iMin": row.I_Min,
+            "iMax": row.I_Max,
+        })
+    return jsonify(data)
 
 
 @db_bp.route('/get_results_to_db', methods=['POST'])
@@ -386,48 +328,40 @@ def get_results_to_db():
         type_no = data.get("type_no")
         prog_no = data.get("prog_no")
         meas_type = data.get("measure_type")
-        result = data.get("result")
+        result_val = data.get("result")
         barcode = data.get("barcode")
 
         if not type_no or not prog_no:
             return jsonify({"error": "Eksik parametre"}), 400
 
-        query = """
-            SELECT ID, DateTime, TypeNo, ProgNo, MeasType, Barcode, ToolCount, Result
-            FROM Results
-            WHERE TypeNo = ? AND ProgNo = ?
-        """
-        params = [type_no, prog_no]
+        session = get_session()
+        query = session.query(Results).filter(
+            Results.TypeNo == type_no,
+            Results.ProgNo == prog_no
+        )
 
         if meas_type:
-            query += " AND MeasType = ?"
-            params.append(meas_type)
-        if result and result != "ALL":
-            query += " AND Result = ?"
-            params.append(result)
+            query = query.filter(Results.MeasType == meas_type)
+        if result_val and result_val != "ALL":
+            query = query.filter(Results.Result == result_val)
         if barcode:
-            query += " AND Barcode = ?"
-            params.append(barcode)
+            query = query.filter(Results.Barcode == barcode)
 
-        cursor.execute(query, tuple(params))
-        rows = cursor.fetchall()
+        rows = query.all()
+        results_list = []
 
-        columns = [desc[0] for desc in cursor.description]
-
-        results = []
-        for row in rows:
-            row_dict = {}
-            for col, val in zip(columns, row):
-                # Eğer val bytes ise, decode et
+        for r in rows:
+            row_dict = r.as_dict()
+            # bytes tipindeki verileri string'e çevir
+            for key, val in row_dict.items():
                 if isinstance(val, bytes):
                     try:
-                        val = val.decode('utf-8')
+                        row_dict[key] = val.decode("utf-8")
                     except UnicodeDecodeError:
-                        val = val.hex()  # decode edilemezse hex string olarak döndür
-                row_dict[col] = val
-            results.append(row_dict)
+                        row_dict[key] = val.hex()
+            results_list.append(row_dict)
 
-        return jsonify(results)
+        return jsonify(results_list)
 
     except Exception as e:
         import traceback
@@ -435,61 +369,39 @@ def get_results_to_db():
         return jsonify({"error": str(e)}), 500
 
 
-
-
-
 @db_bp.route('/save_rgbi', methods=['POST'])
 def save_rgbi():
-    try:
-        data = request.get_json()
-        type_no = data.get("typeNo")
-        prog_no = data.get("progNo")
-        measurements = data.get("measurements")  # Liste: [{id, min_r, max_r, ...}]
+    data = request.get_json()
+    type_no = data.get("typeNo")
+    prog_no = data.get("progNo")
+    measurements = data.get("measurements")
 
-        if not all([type_no, prog_no, measurements]):
-            return jsonify({"error": "Eksik veri"}), 400
+    if not all([type_no, prog_no, measurements]):
+        return jsonify({"error": "Eksik veri"}), 400
 
-        for m in measurements:
-            tool_id = m["id"]
-            r_min = float(m["min_r"])
-            r_max = float(m["max_r"])
-            g_min = float(m["min_g"])
-            g_max = float(m["max_g"])
-            b_min = float(m["min_b"])
-            b_max = float(m["max_b"])
-            i_min = float(m["min_i"])
-            i_max = float(m["max_i"])
+    session = get_session()
+    for m in measurements:
+        tool_id = m["id"]
+        # Eski veriyi sil
+        session.query(RGBITeach).filter_by(TypeNo=type_no, ProgNo=prog_no, Tool_ID=tool_id).delete()
+        # Yeni veriyi ekle
+        new_rgbi = RGBITeach(
+            TypeNo=type_no,
+            ProgNo=prog_no,
+            Tool_ID=tool_id,
+            R_Min=float(m["min_r"]),
+            R_Max=float(m["max_r"]),
+            G_Min=float(m["min_g"]),
+            G_Max=float(m["max_g"]),
+            B_Min=float(m["min_b"]),
+            B_Max=float(m["max_b"]),
+            I_Min=float(m["min_i"]),
+            I_Max=float(m["max_i"]),
+        )
+        session.add(new_rgbi)
 
-            # Eski veriyi sil
-            cursor.execute("""
-                DELETE FROM RGBITeach
-                WHERE TypeNo=? AND ProgNo=? AND Tool_ID=?
-            """, (type_no, prog_no, tool_id))
-
-            # Yeni veriyi ekle
-            cursor.execute("""
-                INSERT INTO RGBITeach (TypeNo, ProgNo, Tool_ID,
-                                       R_Min, R_Max,
-                                       G_Min, G_Max,
-                                       B_Min, B_Max,
-                                       I_Min, I_Max)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                type_no, prog_no, tool_id,
-                r_min, r_max,
-                g_min, g_max,
-                b_min, b_max,
-                i_min, i_max
-            ))
-
-        conn.commit()
-        return jsonify({"status": "OK", "message": "RGBI değerleri kaydedildi"})
-
-    except Exception as e:
-        import traceback
-        print("🔴 RGBI kayıt hatası:\n", traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
-
+    session.commit()
+    return jsonify({"status": "OK", "message": "RGBI değerleri kaydedildi"})
 
 
 # =================== SaveResults =====================
@@ -502,14 +414,13 @@ def save_results():
         meas_type = data['MeasType']
         barcode = data['Barcode']
         tool_count = data['ToolCount']
-        result = data['Result']
+        result_val = data['Result']
         raw_datetime = data['DateTime']
-
 
         # Doğru parçalama
         if "_" not in raw_datetime:
             raise ValueError("DateTime formatı '_' içermiyor!")
-        
+
         date_part, time_part = raw_datetime.split('_')  # "2025-07-10", "10-10-29-333"
         time_parts = time_part.split('-')  # ["10", "10", "29", "333"]
 
@@ -520,106 +431,83 @@ def save_results():
         raw_dt = f"{date_part} {time_parts[0]}:{time_parts[1]}:{time_parts[2]}.{time_parts[3]}000"
         dt_obj = datetime.strptime(raw_dt, "%Y-%m-%d %H:%M:%S.%f")
 
-        # Veritabanı için istenen format
-        formatted_datetime = dt_obj.strftime("%d.%m.%Y %H:%M:%S.%f")[:-1]
-
-        # SQL Insert
-        cursor.execute("""
-            INSERT INTO Results ([DateTime], TypeNo, ProgNo, MeasType, Barcode, ToolCount, Result)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (formatted_datetime, type_no, prog_no, meas_type, barcode, tool_count, result))
-
-        conn.commit()
+        session = get_session()
+        new_result = Results(
+            DateTime=dt_obj,
+            TypeNo=type_no,
+            ProgNo=prog_no,
+            MeasType=meas_type,
+            Barcode=barcode,
+            ToolCount=tool_count,
+            Result=result_val
+        )
+        session.add(new_result)
+        session.commit()
         return jsonify({"message": "Sonuç kaydedildi"}), 200
 
     except Exception as e:
+        import traceback
         print("Save_results_hist HATASI:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
-    
 
+# =================== Get All Results =====================
 @db_bp.route("/get_frame_results")
 def get_frame_results():
-    cursor.execute("SELECT * FROM Results ORDER BY DateTime ASC")
-    rows = cursor.fetchall()
-    columns = [col[0] for col in cursor.description]
+    session = get_session()
+    results = session.query(Results).order_by(Results.DateTime.asc()).all()
+    result_list = []
 
-    result = []
-    for row in rows:
-        row_dict = dict(zip(columns, row))
-
-        # DateTime datetime objesi ise stringe çevir
+    for r in results:
+        row_dict = r.as_dict()
+        # DateTime objesini stringe çevir
         if isinstance(row_dict.get("DateTime"), datetime):
             row_dict["DateTime"] = row_dict["DateTime"].strftime("%-d.%m.%Y %H:%M:%S.%f")[:-3]
+        result_list.append(row_dict)
 
-        # Burada tüm bytes tipindeki değerleri stringe çevir
-        for key, value in row_dict.items():
-            if isinstance(value, bytes):
-                try:
-                    row_dict[key] = value.decode("utf-8")  # ya da uygun encoding
-                except Exception:
-                    row_dict[key] = str(value)  # decode olmazsa fallback
+    return jsonify(result_list)
 
-        result.append(row_dict)
 
-    conn.commit()
-    print(result)
-    return jsonify(result)
-
+# =================== Get Result by Metadata =====================
 @db_bp.route("/get_result_by_metadata", methods=["GET"])
 def get_result_by_metadata():
     try:
-        # Parametreleri al
         type_no = int(request.args.get("typeNo"))
         prog_no = int(request.args.get("progNo"))
         measure_type = request.args.get("measureType").upper()
         datetime_str = request.args.get("datetime")  # Örn: "2025-07-10 12-04-16-100"
 
-        # Tarih format kontrolü
         if " " not in datetime_str:
             return jsonify({"error": "Invalid datetime format"}), 400
 
         date_part, time_part = datetime_str.split(" ")
+        hour, minute, second, millisec = time_part.split("-")
+        microsec = millisec.ljust(6, '0')
 
-        try:
-            hour, minute, second, millisec = time_part.split("-")
-        except Exception as e:
-            return jsonify({"error": f"Invalid time format: {str(e)}"}), 400
-
-        microsec = millisec.ljust(6, '0')  # mikrosaniyeyi 6 haneye tamamla
-
-        # Biçimlendirilmiş tarih-zaman stringi
         fixed_time = f"{hour}:{minute}:{second}.{microsec}"
-        fixed_datetime_str = f"{date_part} {fixed_time}"
+        dt_obj = datetime.strptime(f"{date_part} {fixed_time}", "%Y-%m-%d %H:%M:%S.%f")
+        dt_obj = dt_obj.replace(microsecond=0)
 
-        # Python datetime nesnesine dönüştür
-        dt_obj = datetime.strptime(fixed_datetime_str, "%Y-%m-%d %H:%M:%S.%f")
-        dt_obj = dt_obj.replace(microsecond=0)  # Access mikro saniye desteklemez
+        session = get_session()
+        row = session.query(Results).filter(
+            Results.DateTime >= dt_obj,
+            Results.DateTime < dt_obj + timedelta(seconds=1),
+            Results.TypeNo == type_no,
+            Results.ProgNo == prog_no,
+            Results.MeasType == measure_type
+        ).first()
 
-        # SQL sorgusunu çalıştır: zaman aralığıyla eşleşenleri al
-        cursor.execute("""
-            SELECT * FROM Results 
-            WHERE DateTime >= ? AND DateTime < ?
-              AND TypeNo = ? AND ProgNo = ? AND MeasType = ?
-        """, (dt_obj, dt_obj + timedelta(seconds=1), type_no, prog_no, measure_type))
-
-        row = cursor.fetchone()
         if row:
-            columns = [desc[0] for desc in cursor.description]
-            result_dict = {}
-
-            # bytes tipindeki verileri JSON için uygun hale getir
-            for key, value in zip(columns, row):
+            row_dict = row.as_dict()
+            # Eğer bytes varsa base64 encode
+            for key, value in row_dict.items():
                 if isinstance(value, bytes):
-                    result_dict[key] = base64.b64encode(value).decode('utf-8')
-                else:
-                    result_dict[key] = value
-
-            return jsonify(result_dict)
+                    row_dict[key] = base64.b64encode(value).decode('utf-8')
+            return jsonify(row_dict)
         else:
             return jsonify(None)
 
     except Exception as e:
-        print("[get_result_by_metadata] Hata:", str(e))
-        return jsonify({"error": str(e)}), 
-
+        import traceback
+        print("[get_result_by_metadata] Hata:", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500

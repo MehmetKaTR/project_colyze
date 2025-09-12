@@ -1,7 +1,0 @@
-ID 2:
-  R: 102.70 -> NOK
-  G: 88.10 -> NOK
-  B: 51.10 -> NOK
-  I: 80.60 -> NOK
-  RESULT: NOK
-

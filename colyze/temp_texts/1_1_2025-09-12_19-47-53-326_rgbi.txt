@@ -1,0 +1,21 @@
+ID 1:
+  R: 112.70 -> OK
+  G: 113.00 -> OK
+  B: 111.60 -> OK
+  I: 112.40 -> OK
+  RESULT: OK
+
+ID 2:
+  R: 113.10 -> NOK
+  G: 116.70 -> NOK
+  B: 112.70 -> NOK
+  I: 114.20 -> NOK
+  RESULT: NOK
+
+ID 3:
+  R: 112.00 -> NOK
+  G: 112.10 -> NOK
+  B: 110.50 -> NOK
+  I: 111.50 -> NOK
+  RESULT: NOK
+

@@ -4,9 +4,14 @@ from pathlib import Path
 auto_bp = Blueprint("auto", __name__)
 
 # app.py'nin klasörü baz alınarak temp dizinlerini belirle
-BASE_DIR = Path(__file__).resolve().parent.parent  # routes klasöründen bir üst klasöre
+BASE_DIR = Path(__file__).resolve().parent.parent.parent / "colyze"
+
 TEMP_FRAMES_DIR = BASE_DIR / "temp_frames"
 TEMP_TEXTS_DIR = BASE_DIR / "temp_texts"
+
+# Klasörler yoksa oluştur
+TEMP_FRAMES_DIR.mkdir(parents=True, exist_ok=True)
+TEMP_TEXTS_DIR.mkdir(parents=True, exist_ok=True)
 
 @auto_bp.route("/auto_frames", methods=["GET"])
 def get_auto_frames():

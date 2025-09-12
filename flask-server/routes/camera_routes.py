@@ -1,6 +1,7 @@
 from flask import Blueprint, Response, jsonify
 import cv2
 import numpy as np
+import json
 import os
 from flask import Blueprint, Response, jsonify, request
 import ctypes
@@ -38,6 +39,18 @@ def stop_camera():
         camera = None
         return True
     return False
+
+@camera_bp.route('/shutdown', methods=['POST'])
+def shutdown():
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        return jsonify({'error': 'Server shutdown not supported'}), 500
+    
+    # Kamera varsa kapat
+    stop_camera()
+
+    func()
+    return jsonify({'status': 'Server shutting down...'})
 
 def get_current_frame():
     """Mevcut frame'i alır."""
@@ -124,6 +137,7 @@ def save_frame():
 
         # Save result as .txt
         text_path = temp_text_dir / f"{filename_base}.txt"
+        print("BURAYA BAK", results)
         with open(text_path, "w", encoding="utf-8") as f:
             for r in results:
                 f.write(f"ID {r['id']}:\n")

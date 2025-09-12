@@ -10,7 +10,7 @@ function createWindow() {
     width: 1920,
     height: 1080,
     frame: false, // Frameless
-    icon: path.join(__dirname, 'assets/logo.png'),
+    icon: path.join(__dirname, 'src/assets/colyze_logo.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -22,8 +22,6 @@ function createWindow() {
 
   // 🔹 Python backend başlat
   const pythonScript = path.join(__dirname, '..', 'flask-server', 'app.py');
-
-
   pythonProcess = spawn('python', [pythonScript]);
 
   pythonProcess.stdout.on('data', (data) => {
@@ -41,15 +39,31 @@ function createWindow() {
 
 app.whenReady().then(createWindow);
 
+// 🔴 Uygulama kapanırken Python’u da kapat
+function stopPython() {
+  if (pythonProcess) {
+    pythonProcess.kill('SIGTERM');
+    pythonProcess = null;
+    console.log("Python süreci kapatıldı.");
+  }
+}
+
+app.on('before-quit', stopPython);
+
 app.on('window-all-closed', () => {
-  if (pythonProcess) pythonProcess.kill(); // ✅ Pencere kapanınca backend’i de kapat
+  stopPython();
   if (process.platform !== 'darwin') app.quit();
 });
 
-// IPC eventleri (pencereleri bozma)
+// IPC eventleri
 ipcMain.on('window-minimize', () => win.minimize());
+
 ipcMain.on('window-maximize', () => {
   if (win.isMaximized()) win.unmaximize();
   else win.maximize();
 });
-ipcMain.on('window-close', () => win.close());
+
+ipcMain.on('window-close', () => {
+  stopPython();
+  win.close();
+});
