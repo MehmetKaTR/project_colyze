@@ -26,12 +26,36 @@ def insert_type():
     return jsonify({'message': 'TypesF1 eklendi'})
 
 
-"""@db_bp.route('/types', methods=['GET'])
+@db_bp.route('/types', methods=['GET'])
 def get_types():
     session = get_session()
     types = session.query(TypesF1).all()
     result = [t.as_dict() for t in types]
-    return jsonify(result)"""
+    return jsonify(result)
+
+
+@db_bp.route('/types', methods=['PUT'])
+def update_type():
+    data = request.json
+    type_no = data.get('TypeNo')
+    prog_no = data.get('ProgNo')
+    new_prog_name = data.get('ProgName')
+
+    if type_no is None or prog_no is None or new_prog_name is None:
+        return jsonify({'error': 'TypeNo, ProgNo ve ProgName gerekli!'}), 400
+
+    session = get_session()
+    # Önce kaydı bul
+    type_record = session.query(TypesF1).filter_by(TypeNo=type_no, ProgNo=prog_no).first()
+    
+    if not type_record:
+        return jsonify({'error': 'Kayıt bulunamadı!'}), 404
+
+    # ProgName güncelle
+    type_record.ProgName = new_prog_name
+    session.commit()
+
+    return jsonify({'message': 'ProgName başarıyla güncellendi', 'updated_record': type_record.as_dict()})
 
 
 # =================== PolySettingsF1 =====================

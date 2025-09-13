@@ -3,14 +3,16 @@ import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
 import ToolParameters from '../ToolParameters';
 import MeasurementResultTable from '../MeasurementResultTable';
-import { getTypeProgNO, loadPolygonsFromDB, SaveFrameWithPolygons, sendPolygonsToCalculateRgbi, sendPolygonsToCalculateHistogram} from "../Flask";
+import { getTypeProgNO, loadPolygonsFromDB, SaveFrameWithPolygons, sendPolygonsToCalculateRgbi, sendPolygonsToCalculateHistogram, getTypes} from "../Flask";
 
 export const FParams = () => {
   const cameraContainerRef = useRef(null);
   const [typeNo, setTypeNo] = useState(null);
   const [progNo, setProgNo] = useState(null);
+  const [progName, setProgName] = useState(null);
   const [prevTypeNo, setPrevTypeNo] = useState(null);
   const [prevProgNo, setPrevProgNo] = useState(null);
+  const [prevProgName, setPrevProgName] = useState(null);
   const [polygons, setPolygons] = useState([]);
   const [focusedId, setFocusedId] = useState(null);
   const [cropMode, setCropMode] = useState(false);
@@ -18,7 +20,17 @@ export const FParams = () => {
   const [measurementType, setMeasurementType] = useState(null);
   const [rgbiResults, setRgbiResults] = useState([]);
   const [histogramResults, setHistogramResults] = useState([]);
+  const [allTypes, setAllTypes] = useState([]);
 
+  const latestTypeNo = useRef(typeNo);
+  const latestProgNo = useRef(progNo);
+  const latestProgName = useRef(progName);
+
+  useEffect(() => {
+    latestTypeNo.current = typeNo;
+    latestProgNo.current = progNo;
+    latestProgName.current = progName;
+  }, [typeNo, progNo, progName]);
 
   // Kamerayı başlatan fonksiyon
   const startCamera = async () => {
@@ -42,40 +54,44 @@ export const FParams = () => {
     }
   };
 
-  // Son typeNo ve progNo değerlerini ref ile tut (closure sorununu önlemek için)
-  const latestTypeNo = useRef(typeNo);
-  const latestProgNo = useRef(progNo);
-
+  // Backend'den typeNo ve progNo'yu /types endpoint'inden al, ilk kaydı kullan
   useEffect(() => {
-    latestTypeNo.current = typeNo;
-    latestProgNo.current = progNo;
-  }, [typeNo, progNo]);
+  const interval = setInterval(async () => {
+    try {
+      const types = await getTypes(); // [{TypeNo, ProgNo, ...}]
+      if (!types || types.length === 0) return;
 
-  // Backend'den typeNo ve progNo'yu 2 sn'de bir kontrol et
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const result = await getTypeProgNO();
-      if (
-        result &&
-        (result.typeNo !== latestTypeNo.current || result.progNo !== latestProgNo.current)
-      ) {
-        // Önce kamerayı durdur
-        await stopCamera();
+      setAllTypes(types);
 
-        // State güncelle
-        setTypeNo(result.typeNo);
-        setProgNo(result.progNo);
+      const firstType = types[0];
+      const newTypeNo = firstType.TypeNo ?? firstType.type_no;
+      const newProgNo = firstType.ProgNo ?? firstType.program_no;
+      const newProgName = firstType.ProgName ?? firstType.program_name;
 
-        // Sonra kamerayı tekrar başlat
-        await startCamera();
-
-        console.log("typeNo/progNo değişti, kamera restart edildi:", result.typeNo, result.progNo);
+      if (newTypeNo == null || newProgNo == null) {
+        console.warn("TypeNo veya ProgNo null geldi:", firstType);
+        return;
       }
-    }, 2000);
 
-    return () => clearInterval(interval);
-  }, []);
+      if (newTypeNo !== latestTypeNo.current || newProgNo !== latestProgNo.current) {
+        await stopCamera(); // Kamerayı durdur
+        setTypeNo(newTypeNo);
+        setProgNo(newProgNo);
+        setProgName(newProgName)
 
+        await startCamera(); // Kamerayı tekrar başlat
+        console.log("typeNo/progNo değişti, kamera restart edildi:", newTypeNo, newProgNo);
+      }
+    } catch (err) {
+      console.error("Type fetch error:", err);
+    }
+  }, 2000);
+
+  return () => clearInterval(interval);
+}, []);
+
+
+  // Poligonları DB'den yükle
   useEffect(() => {
     const init = async () => {
       if (typeNo !== null && progNo !== null) {
@@ -84,14 +100,16 @@ export const FParams = () => {
           loaded = await loadPolygonsFromDB(typeNo, progNo);
           setPrevTypeNo(typeNo);
           setPrevProgNo(progNo);
+          setPrevProgName(progName);
         } else {
-          loaded = await loadPolygonsFromDB(typeNo, progNo); // Aynıysa yine DB'den çek
+          loaded = await loadPolygonsFromDB(typeNo, progNo);
         }
         setPolygons(loaded);
       }
     };
     init();
-  }, [typeNo, progNo]);
+  }, [typeNo, progNo, progName]);
+
 
   const getFormattedDateTime = () => {
     const now = new Date();
@@ -703,6 +721,8 @@ const deleteFocusedPolygon = async () => {
         <ControlPanel
           typeNo={typeNo}
           progNo={progNo}
+          progName={progName}
+          allTypes={allTypes}
           onAdd={addPolygon}
           onDelete={deleteFocusedPolygon}
           onSave={savePolygonsToDB}

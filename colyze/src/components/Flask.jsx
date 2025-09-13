@@ -68,6 +68,22 @@ export const getTypeProgNO = async () => {
   }
 };
 
+export const getTypes = async () => {
+  try {
+    const response = await fetch('http://localhost:5050/types', {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) throw new Error('Failed to fetch types');
+
+    return await response.json(); // [{id, type_no, program_no, name}, ...]
+  } catch (error) {
+    console.error('Hata:', error.message);
+    return [];
+  }
+};
+
 
 export const loadPolygonsFromDB = async (typeNo, progNo) => {
   try {
