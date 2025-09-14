@@ -23,15 +23,22 @@ function App() {
         
         <Navbar menuOpen={menuOpen} setMenuOpen={setMenuOpen} setActiveTab={setActiveTab} />
         <MobileMenu menuOpen={menuOpen} setMenuOpen={setMenuOpen} setActiveTab={setActiveTab} />
-        
+        {/*
         {activeTab === "auto" && <Auto />}
         {activeTab === "f1" && <FParams />}
         {activeTab === "report" && <Report />}
-        {/*
-        <About />
-        <Projects />
-        <Contact />
         */}
+
+        <div className={activeTab === "auto" ? "block" : "hidden"}>
+          <Auto />
+        </div>
+        <div className={activeTab === "f1" ? "block" : "hidden"}>
+          <FParams />
+        </div>
+        <div className={activeTab === "report" ? "block" : "hidden"}>
+          <Report />
+        </div>
+
       </div>
     </>
   )

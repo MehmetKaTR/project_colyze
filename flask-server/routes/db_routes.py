@@ -58,6 +58,51 @@ def update_type():
     return jsonify({'message': 'ProgName başarıyla güncellendi', 'updated_record': type_record.as_dict()})
 
 
+@db_bp.route('/types', methods=['POST'])
+def add_type():
+    data = request.json
+    type_no = data.get('TypeNo')
+    prog_name = data.get('ProgName')
+
+    if type_no is None or prog_name is None:
+        return jsonify({'error': 'TypeNo ve ProgName gerekli!'}), 400
+
+    session = get_session()
+    # En büyük prog_no'yu bul
+    max_prog = session.query(TypesF1).filter_by(TypeNo=type_no).order_by(TypesF1.ProgNo.desc()).first()
+    new_prog_no = (max_prog.ProgNo + 1) if max_prog else 1
+
+    new_type = TypesF1(
+        TypeNo=type_no,
+        ProgNo=new_prog_no,
+        ProgName=prog_name
+    )
+    session.add(new_type)
+    session.commit()
+
+    return jsonify({'message': 'Program başarıyla eklendi', 'new_record': new_type.as_dict()})
+
+
+@db_bp.route('/types', methods=['DELETE'])
+def delete_type():
+    data = request.json
+    type_no = data.get('TypeNo')
+    prog_no = data.get('ProgNo')
+
+    if type_no is None or prog_no is None:
+        return jsonify({'error': 'TypeNo ve ProgNo gerekli!'}), 400
+
+    session = get_session()
+    type_record = session.query(TypesF1).filter_by(TypeNo=type_no, ProgNo=prog_no).first()
+
+    if not type_record:
+        return jsonify({'error': 'Kayıt bulunamadı!'}), 404
+
+    session.delete(type_record)
+    session.commit()
+
+    return jsonify({'message': 'Program başarıyla silindi'})
+
 # =================== PolySettingsF1 =====================
 @db_bp.route('/polysettings', methods=['POST'])
 def insert_polysettings():

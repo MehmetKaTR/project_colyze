@@ -1,0 +1,21 @@
+ID 1:
+  R: 89.00 -> NOK
+  G: 94.40 -> NOK
+  B: 91.10 -> NOK
+  I: 91.50 -> NOK
+  RESULT: NOK
+
+ID 2:
+  R: 85.20 -> NOK
+  G: 92.00 -> NOK
+  B: 88.30 -> NOK
+  I: 88.50 -> NOK
+  RESULT: NOK
+
+ID 3:
+  R: 97.30 -> NOK
+  G: 99.00 -> NOK
+  B: 98.80 -> NOK
+  I: 98.40 -> NOK
+  RESULT: NOK
+

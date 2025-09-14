@@ -54,6 +54,7 @@ export const FParams = () => {
     }
   };
 
+  /*
   // Backend'den typeNo ve progNo'yu /types endpoint'inden al, ilk kaydı kullan
   useEffect(() => {
   const interval = setInterval(async () => {
@@ -89,7 +90,41 @@ export const FParams = () => {
 
   return () => clearInterval(interval);
 }, []);
+*/
 
+// İlk açılışta typeNo/progNo'yu backend'den al
+useEffect(() => {
+  const init = async () => {
+    try {
+      const types = await getTypes(); // [{TypeNo, ProgNo, ...}]
+      if (!types || types.length === 0) return;
+
+      setAllTypes(types);
+
+      const firstType = types[0];
+      const newTypeNo = firstType.TypeNo ?? firstType.type_no;
+      const newProgNo = firstType.ProgNo ?? firstType.program_no;
+      const newProgName = firstType.ProgName ?? firstType.program_name;
+
+      if (newTypeNo == null || newProgNo == null) {
+        console.warn("TypeNo veya ProgNo null geldi:", firstType);
+        return;
+      }
+
+      setTypeNo(newTypeNo);
+      setProgNo(newProgNo);
+      setProgName(newProgName);
+
+      await stopCamera(); // önce kamerayı durdur
+      await startCamera(); // sonra tekrar başlat
+      console.log("İlk init yapıldı, kamera restart edildi:", newTypeNo, newProgNo);
+    } catch (err) {
+      console.error("Type fetch error:", err);
+    }
+  };
+
+  init();
+}, []);
 
   // Poligonları DB'den yükle
   useEffect(() => {
@@ -729,6 +764,17 @@ const deleteFocusedPolygon = async () => {
           onCalculate={measureFuncs}
           onTeach={teachFuncs}
           onCropModeToggle={() => setCropMode(prev => !prev)} // burada toggle'ı gönderiyorsun
+          onTypeProgramChange={async (newTypeNo, newProgNo, newProgName) => {
+          // State güncelle
+          setTypeNo(newTypeNo);
+          setProgNo(newProgNo);
+          setProgName(newProgName);
+
+          // Kamera resetle
+          await stopCamera();
+          await startCamera();
+          console.log("Type/Prog değişti:", newTypeNo, newProgNo, newProgName);
+        }}
         />
       </div>
       <div className="flex flex-row space-x-4">
