@@ -15,6 +15,7 @@ const ControlPanel = ({
   onTeach = {},
   onCropModeToggle,
   onTypeProgramChange, 
+  refreshTypes
 }) => {
   const initialMethod = Object.keys(onCalculate)[0] || '';
   const [selectedMethod, setSelectedMethod] = useState(initialMethod);
@@ -274,6 +275,10 @@ const ControlPanel = ({
         const data = await res.json();
         console.log(data);
         setShowAddPopup(false);
+
+        if (typeof refreshTypes === "function") {
+          await refreshTypes();
+        }
       }}
     />
 
@@ -294,6 +299,10 @@ const ControlPanel = ({
         const data = await res.json();
         console.log(data);
         setShowDeletePopup(false);
+
+        if (typeof refreshTypes === "function") {
+          await refreshTypes();
+        }
       }}
     />
     </>

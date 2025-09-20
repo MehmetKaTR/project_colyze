@@ -4,10 +4,13 @@ from pathlib import Path
 auto_bp = Blueprint("auto", __name__)
 
 # app.py'nin klasörü baz alınarak temp dizinlerini belirle
-BASE_DIR = Path(__file__).resolve().parent.parent.parent / "colyze"
+BASE_DIR = Path(__file__).resolve().parent.parent.parent / "flask-server"
 
 TEMP_FRAMES_DIR = BASE_DIR / "temp_frames"
 TEMP_TEXTS_DIR = BASE_DIR / "temp_texts"
+
+print(TEMP_FRAMES_DIR)
+print(TEMP_TEXTS_DIR)
 
 # Klasörler yoksa oluştur
 TEMP_FRAMES_DIR.mkdir(parents=True, exist_ok=True)

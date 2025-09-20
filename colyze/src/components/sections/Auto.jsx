@@ -44,12 +44,17 @@ export const Auto = () => {
   const [focusedFrame, setFocusedFrame] = useState(null);
   const [measurementResults, setMeasurementResults] = useState([]);
 
-  useEffect(() => {
-    async function fetchFrames() {
+  const fetchFrames = async () => {
+    try {
       const res = await fetch("http://localhost:5050/auto_frames");
       const data = await res.json();
       setLeftFrames(data);
+    } catch (err) {
+      console.error("Frames fetch error:", err);
     }
+  };
+
+  useEffect(() => {
     fetchFrames();
   }, []);
 

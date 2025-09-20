@@ -7,7 +7,7 @@ from routes.auto_routes import auto_bp
 from pathlib import Path
 
 # BASE_DIR: app.py'nin bulunduğu klasör
-BASE_DIR = Path(__file__).resolve().parent.parent / "colyze"
+BASE_DIR = Path(__file__).resolve().parent.parent / "flask-server"
 
 # Temp klasörler
 TEMP_FRAMES_DIR = BASE_DIR / "temp_frames"

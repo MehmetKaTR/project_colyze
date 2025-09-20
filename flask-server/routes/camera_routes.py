@@ -16,8 +16,9 @@ import pyodbc
 import csv
 
 camera_bp = Blueprint('camera', __name__)
-
 camera = None
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 def start_camera():
     """Kamerayı başlatır."""
@@ -119,10 +120,15 @@ def save_frame():
             return jsonify({'error': 'Invalid image data'}), 400
 
         # Create directories
-        temp_frame_dir = Path("temp_frames")
-        temp_frame_dir.mkdir(exist_ok=True)
-        temp_text_dir = Path("temp_texts")
-        temp_text_dir.mkdir(exist_ok=True)
+        temp_frame_dir = BASE_DIR / "temp_frames"
+        temp_text_dir = BASE_DIR / "temp_texts"
+
+        print("HEY",temp_frame_dir)
+        print("ALOO",temp_text_dir)
+
+
+        temp_frame_dir.mkdir(parents=True, exist_ok=True)
+        temp_text_dir.mkdir(parents=True, exist_ok=True)
 
         # File naming
         if datetime_str:
@@ -133,6 +139,7 @@ def save_frame():
 
         # Save image
         image_path = temp_frame_dir / f"{filename_base}.jpg"
+        print(image_path)
         cv2.imwrite(str(image_path), frame)
 
         # Save result as .txt

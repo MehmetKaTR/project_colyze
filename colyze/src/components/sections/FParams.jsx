@@ -54,6 +54,21 @@ export const FParams = () => {
     }
   };
 
+  const refreshTypes = async () => {
+    const types = await getTypes();
+    setAllTypes(types);
+  };
+
+  const fetchFrames = async () => {
+  try {
+    const res = await fetch("http://localhost:5050/auto_frames");
+    const data = await res.json();
+    setLeftFrames(data); // FPARAM’da leftFrames state
+  } catch (err) {
+    console.error("Frames fetch error:", err);
+  }
+};
+
   /*
   // Backend'den typeNo ve progNo'yu /types endpoint'inden al, ilk kaydı kullan
   useEffect(() => {
@@ -294,6 +309,7 @@ const deleteFocusedPolygon = async () => {
     setPolygons(updatedPolygons)
 
     SaveFrameWithPolygons(typeNo, progNo, updatedPolygons, "rgbi", imageDataUrl, datetime);
+    fetchFrames();
   };
 
   const updatePolygonsWithStatus = (polygons, rgbiResults) => {
@@ -763,6 +779,7 @@ const deleteFocusedPolygon = async () => {
           onSave={savePolygonsToDB}
           onCalculate={measureFuncs}
           onTeach={teachFuncs}
+          refreshTypes={refreshTypes}
           onCropModeToggle={() => setCropMode(prev => !prev)} // burada toggle'ı gönderiyorsun
           onTypeProgramChange={async (newTypeNo, newProgNo, newProgName) => {
           // State güncelle
