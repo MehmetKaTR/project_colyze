@@ -6,7 +6,7 @@ export const ProgramAddPopup = ({ isOpen, onClose, onSave, defaultTypeNo, lastPr
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+    <div className="fixed inset-0 flex items-center justify-center bg-opacity-50 backdrop-blur-sm z-50">
       <div className="bg-white p-6 rounded-xl shadow-xl text-black w-96">
         <h2 className="text-xl font-bold mb-4">Add New Program</h2>
         <input

@@ -4,7 +4,7 @@ export const ProgramDeletePopup = ({ isOpen, onClose, onDelete, typeNo, progNo, 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+    <div className="fixed inset-0 flex items-center justify-center bg-opacity-50 backdrop-blur-sm z-50">
       <div className="bg-white p-6 rounded-xl shadow-xl text-black w-96">
         <h2 className="text-xl font-bold mb-4">Program Sil</h2>
         <p>

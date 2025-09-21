@@ -30,4 +30,5 @@ __pycache__/
 .DS_Store
 
 
-colyze/temp_frames
+flask-server/temp_frames
+flask-server/temp_texts

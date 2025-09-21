@@ -149,6 +149,17 @@ def save_frame():
             for r in results:
                 f.write(f"ID {r['id']}:\n")
                 if measure_type == "rgbi":
+                    each_status = r.get("each_status", [])
+
+                    # Teach verisi yoksa veya eksikse hata döndür
+                    if (
+                        not isinstance(each_status, list) 
+                        or len(each_status) < 4 
+                        or any(s is None or str(s).strip() == "" for s in each_status)
+                    ):
+                        return jsonify({"error": "Teach verisi bulunmuyor. Lütfen önce Teach yapın."}), 400
+
+                    
                     status_labels = ["OK" if s else "NOK" for s in r["each_status"]]
                     f.write(f"  R: {r['avg_r']:.2f} -> {status_labels[0]}\n")
                     f.write(f"  G: {r['avg_g']:.2f} -> {status_labels[1]}\n")

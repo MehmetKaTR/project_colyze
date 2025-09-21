@@ -84,6 +84,24 @@ export const getTypes = async () => {
   }
 };
 
+export async function addProgram(typeNo, progNo, progName) {
+  const res = await fetch("http://localhost:5050/types", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ TypeNo: typeNo, ProgNo: progNo, ProgName: progName }),
+  });
+  return res.json();
+}
+
+export async function deleteProgram(typeNo, progNo) {
+  const res = await fetch("http://localhost:5050/types", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ TypeNo: typeNo, ProgNo: progNo }),
+  });
+  return res.json();
+}
+
 
 export const loadPolygonsFromDB = async (typeNo, progNo) => {
   try {
@@ -226,7 +244,12 @@ export const sendPolygonsToCalculateRgbi = async ({
     });
 
     if (!saveResponse.ok) {
-      alert("Fotoğraf kaydetme başarısız.");
+      const errMsg = await saveResponse.json();
+      if (errMsg.error && errMsg.error.includes("Teach")) {
+        alert("Teach yapılmadan görüntü kaydı yapılamaz. Lütfen önce Teach yapınız.");
+      } else {
+        alert("Fotoğraf kaydetme başarısız.");
+      }
       return;
     }
 

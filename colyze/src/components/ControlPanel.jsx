@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ProgramAddPopup } from './ProgramAddPopup';
 import { ProgramDeletePopup } from './ProgramDeletePopup';
+import { addProgram, deleteProgram } from "./Flask";
 
 
 const ControlPanel = ({
@@ -260,22 +261,16 @@ const ControlPanel = ({
           </div>
         ))}
       </div>
-      {/* Popup'lar kesinlikle return içindeyken */}
+      
     <ProgramAddPopup
       isOpen={showAddPopup}
       onClose={() => setShowAddPopup(false)}
       defaultTypeNo={typesList[selectedTypeIndex]?.typeNo}
       lastProgNo={typesList[selectedTypeIndex]?.programs.slice(-1)[0]?.progNo ?? 0}
       onSave={async (typeNo, progNo, progName) => {
-        const res = await fetch("http://localhost:5050/types", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ TypeNo: typeNo, ProgNo: progNo, ProgName: progName }),
-        });
-        const data = await res.json();
+        const data = await addProgram(typeNo, progNo, progName);
         console.log(data);
         setShowAddPopup(false);
-
         if (typeof refreshTypes === "function") {
           await refreshTypes();
         }
@@ -291,15 +286,9 @@ const ControlPanel = ({
       onDelete={async () => {
         const t = typesList[selectedTypeIndex];
         const p = t?.programs[selectedProgIndex];
-        const res = await fetch("http://localhost:5050/types", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ TypeNo: t?.typeNo, ProgNo: p?.progNo }),
-        });
-        const data = await res.json();
+        const data = await deleteProgram(t?.typeNo, p?.progNo);
         console.log(data);
         setShowDeletePopup(false);
-
         if (typeof refreshTypes === "function") {
           await refreshTypes();
         }

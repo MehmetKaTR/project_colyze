@@ -399,6 +399,8 @@ def get_results_to_db():
         meas_type = data.get("measure_type")
         result_val = data.get("result")
         barcode = data.get("barcode")
+        from_date = data.get("from_date")
+        to_date = data.get("to_date")
 
         if not type_no or not prog_no:
             return jsonify({"error": "Eksik parametre"}), 400
@@ -416,12 +418,17 @@ def get_results_to_db():
         if barcode:
             query = query.filter(Results.Barcode == barcode)
 
+        # 🔥 Tarih filtreleme
+        if from_date:
+            query = query.filter(Results.DateTime >= from_date)
+        if to_date:
+            query = query.filter(Results.DateTime <= to_date + " 23:59:59")
+
         rows = query.all()
         results_list = []
 
         for r in rows:
             row_dict = r.as_dict()
-            # bytes tipindeki verileri string'e çevir
             for key, val in row_dict.items():
                 if isinstance(val, bytes):
                     try:

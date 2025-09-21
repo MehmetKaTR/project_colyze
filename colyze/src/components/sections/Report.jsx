@@ -10,6 +10,10 @@ export const Report = () => {
   const [barcode, setBarcode] = useState("");
   const [results, setResults] = useState([]);
 
+  // 🔥 yeni state’ler
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
   const handleSearch = async () => {
     try {
       const response = await fetch("http://localhost:5050/get_results_to_db", {
@@ -23,6 +27,8 @@ export const Report = () => {
           measure_type: measType,
           result: result,
           barcode: barcode,
+          from_date: fromDate,
+          to_date: toDate,
         }),
       });
 
@@ -39,6 +45,8 @@ export const Report = () => {
 
   const handleRefresh = () => {
     setResults([]);
+    setFromDate("");
+    setToDate("");
   };
 
   const handleExport = (type) => {
@@ -53,7 +61,7 @@ export const Report = () => {
     <div className="min-h-screen bg-gray-100 pt-20 p-6 space-y-6">
       {/* Üst Form */}
       <div className="w-full border shadow rounded flex space-x-4 p-4 bg-white">
-        <div className="w-1/2 grid grid-cols-2 grid-rows-2 gap-2">
+        <div className="w-1/2 grid grid-cols-2 grid-rows-3 gap-2">
           <div className="grid grid-cols-2">
             <input
               type="number"
@@ -95,6 +103,26 @@ export const Report = () => {
               <option value="ALL">ALL</option>
             </select>
             <div className="flex items-center justify-center text-black">RESULT</div>
+          </div>
+
+          {/* 🔥 Yeni From-To tarih alanları */}
+          <div className="grid grid-cols-2">
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="w-full text-center rounded border text-black"
+            />
+            <div className="flex items-center justify-center text-black">FROM</div>
+          </div>
+          <div className="grid grid-cols-2">
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="w-full text-center rounded border text-black"
+            />
+            <div className="flex items-center justify-center text-black">TO</div>
           </div>
         </div>
 
