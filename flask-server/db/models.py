@@ -22,7 +22,7 @@ class HistTeach(Base):
 class RGBITeach(Base):
     __tablename__ = "RGBITeach"
 
-    D = Column(Integer, primary_key=True, autoincrement=True)
+    ID = Column(Integer, primary_key=True, autoincrement=True)
     TypeNo = Column(Integer)
     ProgNo = Column(Integer)
     Tool_ID = Column(Integer)
@@ -34,6 +34,10 @@ class RGBITeach(Base):
     B_Max = Column(Integer)
     I_Min = Column(Integer)
     I_Max = Column(Integer)
+    R_Tole = Column(Integer)
+    G_Tole = Column(Integer)
+    B_Tole = Column(Integer)
+    I_Tole = Column(Integer)
 
     def as_dict(self):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}

@@ -432,7 +432,7 @@ export const sendPolygonsToCalculateHistogram = async ({
 };
 
 
-const captureSingleMeasurement = async (imageElement, polygonData) => {
+export const captureSingleMeasurement = async (imageElement, polygonData) => {
   const canvas = document.createElement('canvas');
   canvas.width = imageElement.width;
   canvas.height = imageElement.height;

@@ -499,6 +499,10 @@ def save_rgbi():
             B_Max=float(m["max_b"]),
             I_Min=float(m["min_i"]),
             I_Max=float(m["max_i"]),
+            R_Tole=float(m["tole_r"]),
+            G_Tole=float(m["tole_g"]),
+            B_Tole=float(m["tole_b"]),
+            I_Tole=float(m["tole_i"]),
         )
         session.add(new_rgbi)
 

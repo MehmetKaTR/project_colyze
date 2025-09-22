@@ -3,7 +3,7 @@ import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
 import ToolParameters from '../ToolParameters';
 import MeasurementResultTable from '../MeasurementResultTable';
-import { getTypeProgNO, loadPolygonsFromDB, SaveFrameWithPolygons, sendPolygonsToCalculateRgbi, sendPolygonsToCalculateHistogram, getTypes} from "../Flask";
+import { getTypeProgNO, loadPolygonsFromDB, SaveFrameWithPolygons, sendPolygonsToCalculateRgbi, sendPolygonsToCalculateHistogram, captureSingleMeasurement, getTypes} from "../Flask";
 
 export const FParams = () => {
   const cameraContainerRef = useRef(null);
@@ -428,24 +428,6 @@ const deleteFocusedPolygon = async () => {
   };
   */
 
-  const captureSingleMeasurement = async (imageElement, polygonData) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = imageElement.width;
-    canvas.height = imageElement.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
-    const imageDataUrl = canvas.toDataURL('image/jpeg');
-
-    const response = await fetch('http://localhost:5050/calculate_rgbi', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ polygons: polygonData, image: imageDataUrl }),
-    });
-
-    return await response.json();
-  };
-
-
   const TeachTheMeasurement = async (typeNo, progNo, imageElement, setTolerance, polygons) => {
     try {
       if (!imageElement) {
@@ -496,6 +478,10 @@ const deleteFocusedPolygon = async () => {
           max_b: Math.min(255, r.avg_b + tol_b),
           min_i: Math.max(0, r.intensity - tol_i),
           max_i: Math.min(255, r.intensity + tol_i),
+          tole_r: tol_r,
+          tole_g: tol_g,
+          tole_b: tol_b,
+          tole_i: tol_i,
         };
       });
 

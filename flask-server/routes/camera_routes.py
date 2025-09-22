@@ -23,7 +23,7 @@ def start_camera():
     """Kamerayı başlatır."""
     global camera
     if camera is None:
-        camera = cv2.VideoCapture(1)  # Linux’ta genellikle 0 ilk kameradır
+        camera = cv2.VideoCapture(1)  # Linux’ta genellikle 0 ilk kameradır   Hoca img source için windowsta .dll lazim yoksa gray kalio kamera
         camera.set(cv2.CAP_PROP_FRAME_WIDTH, 3072)   # 0 bazen kameranın native çözünürlüğü demek
         camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 2048)
         if not camera.isOpened():
