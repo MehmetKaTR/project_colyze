@@ -18,7 +18,31 @@ const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode
   const MIN_SCALE = 1;
   const MAX_SCALE = 2.5;
 
-  const [cropRect, setCropRect] = useState({ x: 100, y: 100, width: 1485, height: 600 });
+  const [cropRect, setCropRect] = useState(null); 
+  const defaultRect = { x: 100, y: 100, width: 1485, height: 600 };
+
+  // CropRect useEffect
+  useEffect(() => {
+    if (!typeNo || !progNo) return;
+
+    const fetchCropRect = async () => {
+      try {
+        const resp = await fetch(`http://localhost:5050/type-rect/${typeNo}/${progNo}`);
+        const data = await resp.json();
+        if (data.found) {
+          setCropRect({ x: data.RectX, y: data.RectY, width: data.RectW, height: data.RectH });
+        } else {
+          setCropRect(defaultRect); // database’de yoksa default set et
+        }
+      } catch (err) {
+        console.error(err);
+        setCropRect(defaultRect); // hata durumunda da default
+      }
+    };
+
+    fetchCropRect();
+  }, [typeNo, progNo]);
+
 
   const handleMouseDown = (e) => {
     if (e.ctrlKey && e.button === 0) {
@@ -56,17 +80,18 @@ const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode
     }
   };
   
-  const fetchLiveImage = async (typeNo, progNo, full) => {
+  const fetchLiveImage = async (typeNo, progNo, cropMode, cropRect) => {
     try {
-      const url = full
-        ? `http://localhost:5050/live_camera?full=true`
-        : `http://localhost:5050/live_camera?typeNo=${typeNo}&progNo=${progNo}`;
+      let url = `http://localhost:5050/live_camera`;
+      if (!cropMode && cropRect) {
+        url += `?typeNo=${typeNo}&progNo=${progNo}&x=${cropRect.x}&y=${cropRect.y}&w=${cropRect.width}&h=${cropRect.height}`;
+      } else {
+        url += `?full=true`;
+      }
 
       const response = await fetch(url);
       const data = await response.json();
-      if (data.image) {
-        setImageSrc(data.image);
-      }
+      if (data.image) setImageSrc(data.image);
     } catch (error) {
       console.error('Görüntü alınamadı:', error);
     }
@@ -89,15 +114,21 @@ const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode
     }
   }, [imageSrc]);
 
+  // Live camera useEffect
   useEffect(() => {
-    fetchLiveImage(typeNo, progNo, cropMode); // cropMode=false ise full göster
+    if (!typeNo || !progNo) return;
+    if (!cropRect) return; // cropRect hazır olana kadar bekle
 
-    intervalRef.current = setInterval(() => {
-      fetchLiveImage(typeNo, progNo, cropMode);
-    }, 500);
+    const fetch = () => {
+      fetchLiveImage(typeNo, progNo, cropMode, cropRect);
+    };
+
+    fetch();
+    intervalRef.current = setInterval(fetch, 500);
 
     return () => clearInterval(intervalRef.current);
-  }, [typeNo, progNo, cropMode]);
+  }, [typeNo, progNo, cropMode, cropRect]);
+
 
   useEffect(() => {
     const handleWheel = (e) => {

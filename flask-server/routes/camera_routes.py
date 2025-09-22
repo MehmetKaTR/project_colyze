@@ -1,9 +1,8 @@
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, jsonify, request
+import requests
 import cv2
 import numpy as np
 import json
-import os
-from flask import Blueprint, Response, jsonify, request
 import ctypes
 import tisgrabber as tis
 import cv2
@@ -24,7 +23,7 @@ def start_camera():
     """Kamerayı başlatır."""
     global camera
     if camera is None:
-        camera = cv2.VideoCapture(0)  # Linux’ta genellikle 0 ilk kameradır
+        camera = cv2.VideoCapture(1)  # Linux’ta genellikle 0 ilk kameradır
         camera.set(cv2.CAP_PROP_FRAME_WIDTH, 3072)   # 0 bazen kameranın native çözünürlüğü demek
         camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 2048)
         if not camera.isOpened():
@@ -263,53 +262,31 @@ def save_frame_with_polygons():
         return jsonify({"error": str(e)}), 500
 
 
+camera_mode = {
+    "full": False  # default crop
+}
+
 @camera_bp.route('/live_camera')
 def live_camera():
-    # TypeNo ve ProgNo parametrelerini al
-    type_no = request.args.get('typeNo', type=int)
-    prog_no = request.args.get('progNo', type=int)
+    x = request.args.get('x', type=int)
+    y = request.args.get('y', type=int)
+    w = request.args.get('w', type=int)
+    h = request.args.get('h', type=int)
+    full = request.args.get('full', 'false').lower() == 'true'
 
     frame = get_current_frame()
     if frame is None:
         return jsonify({'error': 'Kameradan görüntü alınamadı'}), 500
 
-    # Access'ten crop koordinatlarını çek
-    db_path = r"C:\Users\mehme\Desktop\University\Stajlar\Agasan\AccessDBS\colyze.accdb"
-    conn_str = (
-        r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
-        fr'DBQ={db_path};'
-    )
-    conn = pyodbc.connect(conn_str)
-    cursor = conn.cursor()
-
-    result = None
-    if type_no is not None and prog_no is not None:
-        try:
-            cursor.execute("""
-                SELECT RectX, RectY, RectW, RectH 
-                FROM TypeImages 
-                WHERE TypeNo = ? AND ProgramNo = ?
-                ORDER BY ID DESC
-            """, (type_no, prog_no))
-            result = cursor.fetchone()
-        except Exception as e:
-            print("DB Hatası:", e)
-
-    conn.close()
-
-    # Eğer eşleşen kayıt varsa crop uygula
-    if result:
-        x, y, w, h = map(int, result)
-        height, width = frame.shape[:2]
-
-        x = max(0, min(x, width - 1))
-        y = max(0, min(y, height - 1))
-        w = max(1, min(w, width - x))
-        h = max(1, min(h, height - y))
-
-        cropped = frame[y:y + h, x:x + w]
+    if full or None in [x, y, w, h]:
+        cropped = frame
     else:
-        cropped = frame  # Eğer eşleşen kayıt yoksa tüm kareyi gönder
+        h_frame, w_frame = frame.shape[:2]
+        x = max(0, min(x, w_frame-1))
+        y = max(0, min(y, h_frame-1))
+        w = max(1, min(w, w_frame-x))
+        h = max(1, min(h, h_frame-y))
+        cropped = frame[y:y+h, x:x+w]
 
     _, buffer = cv2.imencode('.jpg', cropped)
     img_uri = f"data:image/jpeg;base64,{base64.b64encode(buffer).decode()}"

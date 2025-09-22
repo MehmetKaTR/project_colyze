@@ -304,6 +304,32 @@ def get_type_rects():
     result = [r.as_dict() for r in rects]
     return jsonify(result)
 
+@db_bp.route('/type-rect/<int:type_no>/<int:prog_no>', methods=['GET'])
+def get_type_rect_coords(type_no, prog_no):
+    """Belirli TypeNo ve ProgramNo için crop koordinatlarını getir"""
+    session = get_session()
+    try:
+        type_img = session.query(TypeImages).filter_by(
+            TypeNo=type_no, 
+            ProgramNo=prog_no
+        ).order_by(TypeImages.ID.desc()).first()
+        
+        if type_img:
+            return jsonify({
+                'found': True,
+                'RectX': type_img.RectX,
+                'RectY': type_img.RectY,
+                'RectW': type_img.RectW,
+                'RectH': type_img.RectH
+            })
+        else:
+            return jsonify({'found': False})
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
 
 # =================== HistTeach =====================
 @db_bp.route('/save_histogram', methods=['POST'])
