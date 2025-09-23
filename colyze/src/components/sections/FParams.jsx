@@ -14,6 +14,7 @@ export const FParams = () => {
   const [prevProgNo, setPrevProgNo] = useState(null);
   const [prevProgName, setPrevProgName] = useState(null);
   const [polygons, setPolygons] = useState([]);
+  const [mlPolygons, setMlPolygons] = useState([]);
   const [focusedId, setFocusedId] = useState(null);
   const [cropMode, setCropMode] = useState(false);
   const [tolerance, setTolerance] = useState(null);
@@ -145,6 +146,7 @@ useEffect(() => {
           loaded = await loadPolygonsFromDB(typeNo, progNo);
         }
         setPolygons(loaded);
+        setMlPolygons(loaded.map(p => ({ ...p, okNok: false })));
       }
     };
     init();
@@ -300,6 +302,63 @@ const deleteFocusedPolygon = async () => {
 
     SaveFrameWithPolygons(typeNo, progNo, updatedPolygons, "rgbi", imageDataUrl, datetime);
   };
+
+
+  const MLPreProc = async () => {
+    try {
+      const imageElement = document.getElementById("camera-frame");
+      if (!imageElement) {
+        alert("Kamera görüntüsü yok");
+        return;
+      }
+
+      const datetime = getFormattedDateTime();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = imageElement.width;
+      canvas.height = imageElement.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+      const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+      const preProcResponse = await fetch("http://localhost:5050/pre_proc_ml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mlPolygons,
+          image: imageDataUrl
+        })
+      });
+
+      if (!preProcResponse.ok) {
+        throw new Error(`Pre-processing failed: ${preProcResponse.statusText}`);
+      }
+
+      const results = await preProcResponse.json();
+      console.log("ML Results:", results);
+
+      const saveResponse = await fetch("http://localhost:5050/save_ml_pre_proc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          dateTime: datetime,
+          results
+        })
+      });
+
+      if (!saveResponse.ok) {
+        throw new Error(`Save ML pre-process failed: ${saveResponse.statusText}`);
+      }
+
+      console.log("ML Processing OK ✅");
+
+    } catch (err) {
+      console.error("MLPreProc error:", err);
+    }
+  };
+
 
   const updatePolygonsWithStatus = (polygons, rgbiResults) => {
     return polygons.map(polygon => {
@@ -513,6 +572,20 @@ const deleteFocusedPolygon = async () => {
   };
 
 /*
+  const TeachMLModule = async (typeNo, progNo) => {
+    try {
+      
+
+
+    } catch (err) {
+      console.error("Teach failed:", err);
+      alert("Teaching failed.");
+    }
+  };
+*/
+
+
+/*
   const HistCalculate = async () => {
     try {
       // datetime'ı oluştur
@@ -651,6 +724,8 @@ const deleteFocusedPolygon = async () => {
   };
 
 
+
+
   const HistTeach = async () => {
     const imageElement = document.getElementById("camera-frame");
     if (!imageElement) {
@@ -672,8 +747,30 @@ const deleteFocusedPolygon = async () => {
     });
   };
 
+  const MLTeach = async () => {
+    const imageElement = document.getElementById("camera-frame");
+    if (!imageElement) {
+      alert("Kamera görüntüsü yok");
+      return;
+    }
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = imageElement.width;
+    canvas.height = imageElement.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+    const imageDataUrl = canvas.toDataURL('image/jpeg');
+    
+    await sendPolygonsToTeachHistogram({
+      typeNo,
+      progNo,
+      polygons,
+      image: imageDataUrl,   // burası artık base64 string
+    });
+  };
+
   const measureFuncs = {
-    rgb: RGBICalculate,
+    rgb: MLPreProc,
     hist: HistCalculate,
   };
 
@@ -775,6 +872,8 @@ const deleteFocusedPolygon = async () => {
           <ToolParameters
             polygons={polygons}
             setPolygons={setPolygons}
+            mlPolygons={mlPolygons}
+            setMlPolygons={setMlPolygons}
             focusedId={focusedId}
             setFocusedId={setFocusedId}
             resetPolygonPosition={resetPolygonPosition}

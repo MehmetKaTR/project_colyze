@@ -1,23 +1,25 @@
 from flask import Blueprint, Response, jsonify, request
 import requests
 import cv2
+from skimage.feature import local_binary_pattern
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 import numpy as np
 import json
 import ctypes
 import tisgrabber as tis
 import cv2
-import numpy as np
 import base64
 from pathlib import Path
 import os
 from datetime import datetime
-import pyodbc
-import csv
 
 camera_bp = Blueprint('camera', __name__)
 camera = None
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+print(BASE_DIR)
 
 def start_camera():
     """Kamerayı başlatır."""
@@ -262,6 +264,49 @@ def save_frame_with_polygons():
         return jsonify({"error": str(e)}), 500
 
 
+@camera_bp.route('/save_ml_pre_proc', methods=['POST'])
+def save_ml_pre_proc():
+    try:
+        data = request.get_json()
+        type_no = data.get("typeNo", "unknown")
+        prog_no = data.get("progNo", "unknown")
+        datetime_str = data.get("datetime")
+        results = data.get("results")
+
+        # Ana klasör → ml/type_no/prog_no
+        save_dir = BASE_DIR / "ml" / str(type_no) / str(prog_no)
+        save_dir.mkdir(parents=True, exist_ok=True)
+        print("ML PRE PROC SAVE DIR:", save_dir)
+
+        # File naming
+        if datetime_str:
+            filename_base = f"{type_no}_{prog_no}_{datetime_str}_ml"
+        else:
+            now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
+            filename_base = f"{type_no}_{prog_no}_{now_str}_ml"
+
+        # Save result as .txt
+        text_path = save_dir / f"{filename_base}.txt"
+        print("ML PRE PROC RESULTS BEFORE WRITING ON TXT FILE:", results)    
+
+        with open(text_path, "w", encoding="utf-8") as f:
+            for r in results:
+                poly_id = r.get("id")
+                ok_nok = r.get("okNok", False)
+                features = r.get("features", [])
+                f.write(f"ID: {poly_id} | OK/NOK: {ok_nok}\n")
+                f.write("Features:\n")
+                f.write(" ".join(map(str, features)))  # features'i tek satırda yaz
+                f.write("\n\n")  # polygonlar arası boşluk
+                
+
+        return jsonify({"saved": True, "filename": f"{filename_base}.jpg"})
+    except Exception as e:
+        import traceback
+        print("save_frame HATASI:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+
 camera_mode = {
     "full": False  # default crop
 }
@@ -403,6 +448,126 @@ def calculate_rgbi():
         return jsonify({"error": str(e)}), 500
 
 
+# ------------- Parametreler -------------
+LBP_RADIUS = 1
+LBP_N_POINTS = 8 * LBP_RADIUS
+GLCM_DISTANCES = [1, 2]
+GLCM_ANGLES = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+# ----------------------------------------
+
+def compute_glcm_features(gray, distances=[1,2], angles=[0, np.pi/4, np.pi/2, 3*np.pi/4], levels=16):
+    """
+    Skimage kullanmadan basit GLCM benzeri doku özellikleri çıkarır.
+    """
+    img = (gray / (256/levels)).astype(np.uint8)
+    feats = []
+    
+    for d in distances:
+        for angle in angles:
+            # Dikey kaydırma örneği
+            shifted = np.roll(img, shift=d, axis=0)
+            diff = (img - shifted) ** 2
+            feats.append(np.mean(diff))
+            feats.append(np.std(diff))
+    return np.array(feats, dtype=np.float32)
+
+
+def extract_features(roi: np.ndarray, resize_to=(128,128)):
+    """
+    Poligon içindeki masked RGB ROI'den feature vector çıkarır.
+    CPU dostu, klasik ML için uygun.
+    """
+    if roi is None or roi.size == 0:
+        return np.zeros(1, dtype=np.float32)
+    
+    roi_resized = cv2.resize(roi, resize_to, interpolation=cv2.INTER_AREA)
+    hsv = cv2.cvtColor(roi_resized, cv2.COLOR_BGR2HSV)
+    
+    # --- Renk istatistikleri ---
+    mean_bgr = roi_resized.mean(axis=(0,1))
+    std_bgr  = roi_resized.std(axis=(0,1))
+    mean_hsv = hsv.mean(axis=(0,1))
+    std_hsv  = hsv.std(axis=(0,1))
+    
+    # --- Histogramlar ---
+    hist_b = cv2.calcHist([roi_resized],[0],None,[16],[0,256]).flatten()
+    hist_g = cv2.calcHist([roi_resized],[1],None,[16],[0,256]).flatten()
+    hist_r = cv2.calcHist([roi_resized],[2],None,[16],[0,256]).flatten()
+    hist = np.concatenate([hist_b, hist_g, hist_r])
+    hist = hist / (hist.sum() + 1e-8)
+    
+    # --- Texture (LBP + GLCM) ---
+    gray = cv2.cvtColor(roi_resized, cv2.COLOR_BGR2GRAY)
+    
+    # LBP histogram
+    lbp = local_binary_pattern(gray, LBP_N_POINTS, LBP_RADIUS, method="uniform")
+    n_bins = int(lbp.max() + 1)
+    lbp_hist,_ = np.histogram(lbp.ravel(), bins=n_bins, range=(0,n_bins))
+    lbp_hist = lbp_hist / (lbp_hist.sum() + 1e-8)
+    
+    # GLCM benzeri özellikler
+    glcm_feats = compute_glcm_features(gray)
+    
+    # --- Feature vector birleştir ---
+    features = np.concatenate([
+        mean_bgr, std_bgr,
+        mean_hsv, std_hsv,
+        hist,
+        lbp_hist,
+        glcm_feats
+    ]).astype(np.float32)
+    
+    return features
+
+
+@camera_bp.route('/pre_proc_ml', methods=['POST'])
+def pre_proc_ml():
+    try:
+        data = request.get_json()
+        polygons = data.get("mlPolygons")
+        image_data_url = data.get("image")
+        
+        if not polygons or not image_data_url:
+            return jsonify({"error": "Polygons or image data missing"}), 400
+
+        # Görüntüyü çöz
+        header, encoded = image_data_url.split(",", 1)
+        image_bytes = base64.b64decode(encoded)
+        frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            return jsonify({'error': 'Görüntü verisi çözülemedi'}), 500
+
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        height, width, _ = rgb_frame.shape
+        results = []
+
+        # Poligonlar üzerinden dön
+        for poly in polygons:
+            poly_id = poly.get("id")
+            points = poly.get("points")
+            ok_nok = poly.get("okNok", False)
+            if not points:
+                continue
+            coords = [(int(p["x"]), int(p["y"])) for p in points]
+            mask = np.zeros((height, width), dtype=np.uint8)
+            cv2.fillPoly(mask, [np.array(coords)], 255)
+            masked = cv2.bitwise_and(rgb_frame, rgb_frame, mask=mask)
+
+            feat = extract_features(masked)
+
+            results.append({
+                'id': poly_id,
+                'features': feat.tolist(),
+                'okNok': ok_nok
+            })
+
+        return jsonify(results)
+    except Exception as e:
+        import traceback
+        print("🔴 calculate_ml HATASI:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+
 @camera_bp.route('/calculate_histogram', methods=['POST'])
 def calculate_histogram():
     try:
@@ -540,3 +705,75 @@ def teach_histogram():
         print("🔴 teach_histogram HATASI:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
+
+def load_dataset_from_txt(data_dir):
+    X, y = [], []
+    for txt_file in Path(data_dir).glob("*.txt"):
+        with open(txt_file, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        
+        current_features = []
+        current_label = None
+        for line in lines:
+            if line.startswith("ID:"):
+                # Yeni polygon -> varsa önceki ekle
+                if current_features and current_label is not None:
+                    X.append(current_features)
+                    y.append(current_label)
+                current_features = []
+                current_label = "True" in line  # OK/NOK
+            elif line.startswith("Features:"):
+                continue
+            elif line.strip():  # boş değilse feature satırı
+                feats = list(map(float, line.strip().split()))
+                current_features.extend(feats)
+        
+        # son polygonu da ekle
+        if current_features and current_label is not None:
+            X.append(current_features)
+            y.append(current_label)
+    
+    return np.array(X), np.array(y)
+
+
+@camera_bp.route('/teach_ml', methods=['POST'])
+def train_ml_model():
+    try:
+        data = request.get_json()
+        type_no = data.get("typeNo")
+        prog_no = data.get("progNo")
+
+        if not type_no or not prog_no:
+            return jsonify({"error": "typeNo veya progNo eksik"}), 400
+
+        # Dataset yükleme
+        X, y = load_dataset_from_txt(BASE_DIR + "/ml/")
+        if len(X) == 0:
+            return jsonify({"error": "Dataset boş!"}), 400
+
+        # Train-test split
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+
+        # Model oluştur ve eğit
+        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        model.fit(X_train, y_train)
+
+        # Doğrulama
+        preds = model.predict(X_test)
+        acc = accuracy_score(y_test, preds)
+        print(f"Validation Accuracy: {acc:.4f}")
+
+        # Burada model'i kaydetme kısmını sen ekleyeceksin (örn. joblib ile)
+        return jsonify({
+            "message": "Model başarıyla eğitildi",
+            "typeNo": type_no,
+            "progNo": prog_no,
+            "validationAccuracy": acc
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print("🔴 train_ml_model HATASI:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
