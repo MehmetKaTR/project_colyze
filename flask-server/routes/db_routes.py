@@ -218,7 +218,7 @@ def update_polygons():
 
     # 1️⃣ Eski verileri sil
     session.query(ToolsF1).filter_by(TypeNo=type_no, ProgNo=prog_no).delete()
-    session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no).delete()
+    # session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no).delete()
 
     # 2️⃣ Yeni polygon verilerini ekle
     for polygon in polygons:
@@ -376,6 +376,7 @@ def get_histograms():
     rows = session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no).order_by(HistTeach.Tool_ID, HistTeach.Channel, HistTeach.Bin_Index).all()
 
     data = {}
+    print("rows", rows)
     for row in rows:
         key = str(row.Tool_ID)
         if key not in data:
@@ -383,6 +384,7 @@ def get_histograms():
         data[key][row.Channel.lower()][row.Bin_Index] = float(row.Values)
 
     response = [{"toolId": tool_id, "histogram": hist} for tool_id, hist in data.items()]
+    print("get_histo_py", response)
     return jsonify(response)
 
 

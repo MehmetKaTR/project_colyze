@@ -323,6 +323,7 @@ export const sendPolygonsToCalculateHistogram = async ({
     }
 
     const teachData = await teachRes.json();
+    console.log("teachData", teachData)
 
     // Görselden histogram hesaplat
     const response = await fetch("http://localhost:5050/calculate_histogram", {
@@ -367,7 +368,6 @@ export const sendPolygonsToCalculateHistogram = async ({
   });
 
     setHistogramResults(checkedResults);
-    console.log("HELLOMA", checkedResults);
 
     const processedResults = checkedResults.map(({ id, diff_r, diff_g, diff_b, status }) => ({
       id,

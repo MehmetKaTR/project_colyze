@@ -14,7 +14,7 @@ export const FParams = () => {
   const [prevProgNo, setPrevProgNo] = useState(null);
   const [prevProgName, setPrevProgName] = useState(null);
   const [polygons, setPolygons] = useState([]);
-  const [mlPolygons, setMlPolygons] = useState([]);
+  // const [mlPolygons, setMlPolygons] = useState([]);
   const [focusedId, setFocusedId] = useState(null);
   const [cropMode, setCropMode] = useState(false);
   const [tolerance, setTolerance] = useState(null);
@@ -22,6 +22,9 @@ export const FParams = () => {
   const [rgbiResults, setRgbiResults] = useState([]);
   const [histogramResults, setHistogramResults] = useState([]);
   const [allTypes, setAllTypes] = useState([]);
+
+  const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
 
   const latestTypeNo = useRef(typeNo);
   const latestProgNo = useRef(progNo);
@@ -99,37 +102,40 @@ export const FParams = () => {
 */
 
 // İlk açılışta typeNo/progNo'yu backend'den al
-useEffect(() => {
-  const init = async () => {
-    try {
-      const types = await getTypes(); // [{TypeNo, ProgNo, ...}]
-      if (!types || types.length === 0) return;
+const initializeCameraTypes = async () => {
+  try {
+    const types = await getTypes(); // [{TypeNo, ProgNo, ...}]
+    if (!types || types.length === 0) return;
 
-      setAllTypes(types);
+    setAllTypes(types);
 
-      const firstType = types[0];
-      const newTypeNo = firstType.TypeNo ?? firstType.type_no;
-      const newProgNo = firstType.ProgNo ?? firstType.program_no;
-      const newProgName = firstType.ProgName ?? firstType.program_name;
+    const firstType = types[0];
+    const newTypeNo = firstType.TypeNo ?? firstType.type_no;
+    const newProgNo = firstType.ProgNo ?? firstType.program_no;
+    const newProgName = firstType.ProgName ?? firstType.program_name;
 
-      if (newTypeNo == null || newProgNo == null) {
-        console.warn("TypeNo veya ProgNo null geldi:", firstType);
-        return;
-      }
-
-      setTypeNo(newTypeNo);
-      setProgNo(newProgNo);
-      setProgName(newProgName);
-
-      await stopCamera(); // önce kamerayı durdur
-      await startCamera(); // sonra tekrar başlat
-      console.log("İlk init yapıldı, kamera restart edildi:", newTypeNo, newProgNo);
-    } catch (err) {
-      console.error("Type fetch error:", err);
+    if (newTypeNo == null || newProgNo == null) {
+      console.warn("TypeNo veya ProgNo null geldi:", firstType);
+      return;
     }
-  };
 
-  init();
+    setTypeNo(newTypeNo);
+    setProgNo(newProgNo);
+    setProgName(newProgName);
+
+    // Kamera resetle
+    await stopCamera();
+    await startCamera();
+
+    console.log("İlk init yapıldı, kamera restart edildi:", newTypeNo, newProgNo);
+  } catch (err) {
+    console.error("Type fetch error:", err);
+  }
+};
+
+// useEffect içinde sadece fonksiyon çağrısı
+useEffect(() => {
+  initializeCameraTypes();
 }, []);
 
   // Poligonları DB'den yükle
@@ -146,7 +152,7 @@ useEffect(() => {
           loaded = await loadPolygonsFromDB(typeNo, progNo);
         }
         setPolygons(loaded);
-        setMlPolygons(loaded.map(p => ({ ...p, okNok: false })));
+        // setMlPolygons(loaded.map(p => ({ ...p, okNok: false })));
       }
     };
     init();
@@ -189,63 +195,67 @@ useEffect(() => {
   };
   
 
-  // Bir poligonun içinde bir nokta olup olmadığını kontrol eden fonksiyon (ray-casting algoritması)
+  // Ray-casting algoritması ile noktanın poligon içinde olup olmadığını kontrol eden fonksiyon
   const isPointInPolygon = (point, polygon) => {
-    let x = point.x, y = point.y;
+    const { x, y } = point;
     let inside = false;
+    const points = polygon.points; // polygon nesnesinden points alıyoruz
 
-    for (let i = 0, j = polygon.points.length - 1; i < polygon.points.length; j = i++) {
-      let xi = polygon.points[i].x, yi = polygon.points[i].y;
-      let xj = polygon.points[j].x, yj = polygon.points[j].y;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+      const xi = points[i].x, yi = points[i].y;
+      const xj = points[j].x, yj = points[j].y;
 
-      let intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      const intersect = ((yi > y) !== (yj > y)) &&
+                        (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
       if (intersect) inside = !inside;
     }
 
     return inside;
   };
 
-  // Click event'ini yakalamak için handleClick fonksiyonu
+  // Click event handler
   const handleClick = (e) => {
-    const clickX = e.clientX;
-    const clickY = e.clientY;
-    const clickPoint = { x: clickX, y: clickY };
+    const container = document.getElementById("camera-container");
+    const rect = container.getBoundingClientRect();
 
-    let foundPolygon = null;
+    const clickPoint = {
+      x: (e.clientX - rect.left - 16 - cameraOffset.x) / scale,
+      y: (e.clientY - rect.top - 16 - cameraOffset.y) / scale,
+    };
 
-    polygons.forEach((polygon) => {
-      if (isPointInPolygon(clickPoint, polygon)) {
-        foundPolygon = polygon;
-      }
-    });
+    // Burada sadece polygon nesnesini gönderiyoruz
+    const foundPolygon = polygons.find(polygon =>
+      isPointInPolygon(clickPoint, polygon)
+    );
 
     if (foundPolygon) {
       setFocusedId(foundPolygon.id);
     } else {
-      setFocusedId(null);  // Hiçbir poligonun içinde değilse odak iptal edilir
+      setFocusedId(null);
     }
   };
 
-const deleteFocusedPolygon = async () => {
-  if (focusedId !== null) {
-    try {
-      // Poligonu frontend'de filtrele ve id'leri yeniden sırala
-      const updatedPolygons = polygons
-        .filter(p => p.id !== focusedId)
-        .map((p, index) => ({ ...p, id: index + 1 }));
 
-      setPolygons(updatedPolygons);
-      setFocusedId(null);
+  const deleteFocusedPolygon = async () => {
+    if (focusedId !== null) {
+      try {
+        // Poligonu frontend'de filtrele ve id'leri yeniden sırala
+        const updatedPolygons = polygons
+          .filter(p => p.id !== focusedId)
+          .map((p, index) => ({ ...p, id: index + 1 }));
 
-      // Backend'e sadece tüm güncel polygons listesini gönder
-      await savePolygonsToDB(updatedPolygons);
+        setPolygons(updatedPolygons);
+        setFocusedId(null);
 
-    } catch (err) {
-      console.error("Polygon silinirken hata oluştu:", err);
-      alert("Polygon silinemedi.");
+        // Backend'e sadece tüm güncel polygons listesini gönder
+        await savePolygonsToDB(updatedPolygons);
+
+      } catch (err) {
+        console.error("Polygon silinirken hata oluştu:", err);
+        alert("Polygon silinemedi.");
+      }
     }
-  }
-};
+  };
 
   const savePolygonsToDB = async () => {
     try {
@@ -264,6 +274,19 @@ const deleteFocusedPolygon = async () => {
       if (!response.ok) throw new Error('DB update failed');
 
       alert("Polygons updated in database!");
+      /*
+      setMlPolygons(prev =>
+        polygons.map(newP => {
+          const old = prev.find(p => p.id === newP.id);
+          return {
+            ...newP,
+            okNok: old ? old.okNok : false, // varsa koru, yoksa false ata
+          };
+        })
+      );
+      */
+      // console.log("ML POLY: ", mlPolygons)
+
     } catch (error) {
       console.error("Error updating polygons in DB:", error);
       //alert("Failed to update database.");
@@ -359,6 +382,70 @@ const deleteFocusedPolygon = async () => {
     }
   };
 
+
+  const MLTest = async () => {
+    try {
+      const imageElement = document.getElementById("camera-frame");
+      if (!imageElement) {
+        alert("Kamera görüntüsü yok");
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = imageElement.width || imageElement.videoWidth;
+      canvas.height = imageElement.height || imageElement.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+      const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+      // Pre-processing
+      const preProcResponse = await fetch("http://localhost:5050/pre_proc_ml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mlPolygons,
+          image: imageDataUrl
+        })
+      });
+      const preProcData = await preProcResponse.json();
+
+      // Her tool için sadece kendi feature'ları ile tahmin
+      const toolIds = [1, 2, 3, 4];  // Mevcut tool ID’ler
+      const results = {};
+
+      for (let toolId of toolIds) {
+        // Sadece bu toolId’ye ait polygonların feature’ları
+        console.log("hoha", preProcData)
+        const toolFeatures = preProcData
+          .filter(p => p.id === toolId)
+          .map(p => p.features);
+
+        if (toolFeatures.length === 0) continue; // polygon yoksa atla
+        console.log(toolFeatures)
+
+        const predictResponse = await fetch("http://localhost:5050/predict_ml", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            typeNo,
+            progNo,
+            toolId,
+            features: toolFeatures
+          })
+        });
+
+        const predictData = await predictResponse.json();
+        results[toolId] = predictData.predictions;
+      }
+
+      console.log("Tool bazlı tahminler:", results);
+      alert("Tahminler alındı, console.log'dan görebilirsiniz.");
+
+    } catch (err) {
+      console.error("Hata:", err);
+      alert("Tahmin sırasında hata oluştu: " + err.message);
+    }
+  };
 
   const updatePolygonsWithStatus = (polygons, rgbiResults) => {
     return polygons.map(polygon => {
@@ -572,20 +659,6 @@ const deleteFocusedPolygon = async () => {
   };
 
 /*
-  const TeachMLModule = async (typeNo, progNo) => {
-    try {
-      
-
-
-    } catch (err) {
-      console.error("Teach failed:", err);
-      alert("Teaching failed.");
-    }
-  };
-*/
-
-
-/*
   const HistCalculate = async () => {
     try {
       // datetime'ı oluştur
@@ -748,34 +821,38 @@ const deleteFocusedPolygon = async () => {
   };
 
   const MLTeach = async () => {
-    const imageElement = document.getElementById("camera-frame");
-    if (!imageElement) {
-      alert("Kamera görüntüsü yok");
-      return;
+    try {
+      const response = await fetch("http://localhost:5050/teach_ml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log("✅ ML modeller başarıyla eğitildi:", data.results);
+        alert("✅ ML modeller başarıyla eğitildi!");
+      } else {
+        console.error("❌ ML eğitiminde hata:", data.error);
+        alert("❌ ML eğitiminde hata: " + data.error);
+      }
+    } catch (err) {
+      console.error("❌ Sunucuya bağlanırken hata oluştu:", err);
+      alert("❌ Sunucuya bağlanırken hata oluştu: " + err.message);
     }
-    
-    const canvas = document.createElement('canvas');
-    canvas.width = imageElement.width;
-    canvas.height = imageElement.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
-    const imageDataUrl = canvas.toDataURL('image/jpeg');
-    
-    await sendPolygonsToTeachHistogram({
-      typeNo,
-      progNo,
-      polygons,
-      image: imageDataUrl,   // burası artık base64 string
-    });
   };
 
   const measureFuncs = {
-    rgb: MLPreProc,
-    hist: HistCalculate,
+    rgb: RGBICalculate,// MLTest, //MLPreProc,
+    hist: HistCalculate, //MLPreProc, //HistCalculate
   };
 
   const teachFuncs = {
-    rgb: RGBITeach,
+    rgb: RGBITeach, //MLTeach
     hist: HistTeach,
   };
 
@@ -838,6 +915,10 @@ const deleteFocusedPolygon = async () => {
             focusedId={focusedId}
             onPolygonUpdate={handlePolygonUpdate}
             cropMode={cropMode}
+            offset={cameraOffset}      
+            setOffset={setCameraOffset} 
+            scale={scale}
+            setScale={setScale}
           />
 
         </div>
@@ -872,8 +953,8 @@ const deleteFocusedPolygon = async () => {
           <ToolParameters
             polygons={polygons}
             setPolygons={setPolygons}
-            mlPolygons={mlPolygons}
-            setMlPolygons={setMlPolygons}
+            // mlPolygons={mlPolygons}
+            // setMlPolygons={setMlPolygons}
             focusedId={focusedId}
             setFocusedId={setFocusedId}
             resetPolygonPosition={resetPolygonPosition}

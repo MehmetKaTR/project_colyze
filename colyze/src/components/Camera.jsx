@@ -2,19 +2,19 @@ import React, { useEffect, useState, useRef } from 'react';
 import Polygon from './Polygon';
 import CropRect from './CropRect';
 
-const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode }) => {
+const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode, offset, setOffset, scale, setScale }) => {
   const [imageSrc, setImageSrc] = useState('');
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
 
   const containerRef = useRef(null);
   const intervalRef = useRef(null);
 
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  //const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const lastOffset = useRef({ x: 0, y: 0 });
 
-  const [scale, setScale] = useState(1);
+  // const [scale, setScale] = useState(1);
   const MIN_SCALE = 1;
   const MAX_SCALE = 2.5;
 
@@ -212,6 +212,7 @@ const Camera = ({ typeNo, progNo, polygons, focusedId, onPolygonUpdate, cropMode
                 polygon={{ ...polygon, focused: polygon.id === focusedId }}
                 onUpdate={onPolygonUpdate}
                 status = {status}
+                scale={scale}
               />
             );
           })}

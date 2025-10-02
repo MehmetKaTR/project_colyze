@@ -4,13 +4,13 @@ import RgbInputWidget from './RgbInputWidget';
 const ToolParameters = ({
   polygons,
   setPolygons,
-  mlPolygons,
-  setMlPolygons,
+  // mlPolygons,
+  // setMlPolygons,
   focusedId,
   setFocusedId,
   resetPolygonPosition
 }) => {
-
+  /*
   const toggleOkNok = (polygonId) => {
     setMlPolygons(prev =>
       prev.map(p =>
@@ -18,16 +18,16 @@ const ToolParameters = ({
       )
     );
   };
-
+  */
   // polygon.id bazlı ML polygon bul
-  const getMlPolygon = (polygonId) => mlPolygons.find(p => p.id === polygonId) || {};
+  //const getMlPolygon = (polygonId) => mlPolygons.find(p => p.id === polygonId) || {};
 
   return (
     <div className="w-full h-[30vh] bg-gray-200 rounded-xl p-4 shadow-xl text-black relative flex flex-col">
       <span className="flex justify-center items-center text-black font-bold mb-1">TOOL PARAMETERS</span>
       <div className="space-y-2 flex-1 overflow-auto px-2 py-0 mt-2 mb-2">
         {polygons.map((polygon) => {
-          const mlPolygon = getMlPolygon(polygon.id); // ML polygon eşleşmesi
+          //const mlPolygon = getMlPolygon(polygon.id); // ML polygon eşleşmesi
 
           return (
             <div
@@ -57,6 +57,7 @@ const ToolParameters = ({
               </div>
 
               {/* OK/NOK switch sadece ML polygons için */}
+              {/*
               <div
                 onClick={(e) => { e.stopPropagation(); toggleOkNok(polygon.id); }}
                 className={`w-9 h-9 rounded-md flex justify-center items-center text-white font-bold cursor-pointer ${
@@ -65,7 +66,7 @@ const ToolParameters = ({
               >
                 {mlPolygon.okNok ? 'OK' : 'NOK'}
               </div>
-
+              */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();

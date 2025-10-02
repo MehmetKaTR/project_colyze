@@ -1,14 +1,14 @@
 <device_state libver="3.4" filemajor="1" fileminor="0">
     <device name="DFK 37BUX178" base_name="DFK 37BUX178" unique_name="DFK 37BUX178 26420325">
         <videoformat>RGB32 (3072x2048)</videoformat>
-        <fps>60.000240000960005204</fps>
+        <fps>1.</fps>
         <fliph>0</fliph>
         <flipv>0</flipv>
         <vcdpropertyitems>
             <item guid="{8E972004-3B94-4AA4-A899-65F6A1432713}" name="Startup Behavior" />
             <item guid="{284C0E06-010B-45BF-8291-09D90A459B28}" name="Brightness">
                 <element guid="{B57D3000-0AC6-4819-A609-272A33140ACA}" name="Value">
-                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E03}" value="72" />
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E03}" value="254" />
                 </element>
             </item>
             <item guid="{284C0E08-010B-45BF-8291-09D90A459B28}" name="Hue">
@@ -44,7 +44,7 @@
                     <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E04}" value="0" />
                 </element>
                 <element guid="{B57D3000-0AC6-4819-A609-272A33140ACA}" name="Value">
-                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E08}" value="10.5999999999999996447286321199" />
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E08}" value="8.1999999999999992894572642399" />
                 </element>
             </item>
             <item guid="{90D5702E-E43B-4366-AAEB-7A7A10B448B4}" name="Exposure">
@@ -61,7 +61,7 @@
                     <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E08}" value="1.25999998999759554862976074219e-04" />
                 </element>
                 <element guid="{6519038C-1AD8-4E91-9021-66D64090CC85}" name="Auto Reference">
-                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E03}" value="147" />
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E03}" value="93" />
                 </element>
             </item>
             <item guid="{90D57031-E43B-4366-AAEB-7A7A10B448B4}" name="Trigger">

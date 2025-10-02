@@ -1,10 +1,18 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
-const Polygon = ({ polygon, onClick, onUpdate, status }) => {
+const Polygon = ({ polygon, onClick, onUpdate, status, scale }) => {
   const [draggingIndex, setDraggingIndex] = useState(null);
   const [draggingPolygon, setDraggingPolygon] = useState(false);
+  const [history, setHistory] = useState([]); // Undo için
 
   const handleMouseDown = (e, index) => {
+    const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const cursorpt = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+    // Sağ tık (taşıma için)
     if (e.button === 2) {
       e.preventDefault();
       if (typeof index === 'number') {
@@ -12,15 +20,10 @@ const Polygon = ({ polygon, onClick, onUpdate, status }) => {
       } else if (polygon.focused) {
         setDraggingPolygon(true);
       }
-    } else if (e.button === 0 && e.altKey && polygon.focused) {
+    } 
+    // Alt + Sol Tık → Nokta sil (mevcut senin kodunda vardı)
+    else if (e.button === 0 && e.altKey && polygon.focused) {
       e.preventDefault();
-
-      const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
-      const pt = svg.createSVGPoint();
-      pt.x = e.clientX;
-      pt.y = e.clientY;
-      const cursorpt = pt.matrixTransform(svg.getScreenCTM().inverse());
-
       let closestIndex = null;
       let closestDist = Infinity;
       polygon.points.forEach((p, i) => {
@@ -32,14 +35,46 @@ const Polygon = ({ polygon, onClick, onUpdate, status }) => {
           closestIndex = i;
         }
       });
-
       if (closestDist <= 10 && polygon.points.length > 3) {
+        setHistory([...history, polygon.points]);
         const newPoints = polygon.points.filter((_, i) => i !== closestIndex);
         onUpdate(polygon.id, newPoints);
       }
     }
+    // Ctrl + Sol Tık → En yakın noktayı sil
+    else if (e.button === 0 && e.ctrlKey && polygon.focused) {
+      e.preventDefault();
+      if (polygon.points.length <= 3) return;
+      let closestIndex = null;
+      let closestDist = Infinity;
+      polygon.points.forEach((p, i) => {
+        const dx = p.x - cursorpt.x;
+        const dy = p.y - cursorpt.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestIndex = i;
+        }
+      });
+      if (closestIndex !== null) {
+        setHistory([...history, polygon.points]);
+        const newPoints = polygon.points.filter((_, i) => i !== closestIndex);
+        onUpdate(polygon.id, newPoints);
+      }
+    }
+    // Shift + Sol Tık → Nokta ekle
+    else if (e.button === 0 && e.shiftKey && polygon.focused) {
+      e.preventDefault();
+      const rect = e.target.getBoundingClientRect();
+      const newPoint = {
+        x: (e.clientX - rect.left - 16) / scale,
+        y: (e.clientY - rect.top - 16) / scale,
+      };
+      setHistory([...history, polygon.points]);
+      const newPoints = [...polygon.points, newPoint];
+      onUpdate(polygon.id, newPoints);
+    }
   };
-
 
   const handleMouseUp = () => {
     setDraggingIndex(null);
@@ -63,17 +98,18 @@ const Polygon = ({ polygon, onClick, onUpdate, status }) => {
     }
   };
 
-  const handleAddPoint = (e) => {
-    if (e.shiftKey && e.button === 0 && polygon.focused) {
-      const rect = e.target.getBoundingClientRect();
-      const newPoint = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-      };
-      const newPoints = [...polygon.points, newPoint];
-      onUpdate(polygon.id, newPoints);
-    }
-  };
+  // Ctrl + Z (Undo) listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey && e.key === 'z' && history.length > 0) {
+        const last = history[history.length - 1];
+        setHistory(history.slice(0, -1));
+        onUpdate(polygon.id, last);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [history, polygon.id, onUpdate]);
 
   const pointString = polygon.points.map(p => `${p.x},${p.y}`).join(" ");
 
@@ -90,7 +126,6 @@ const Polygon = ({ polygon, onClick, onUpdate, status }) => {
         if (e.target.tagName === 'svg' || e.target.tagName === 'polygon') {
           handleMouseDown(e);
         }
-        handleAddPoint(e); // Shift+click için
       }}
     >
       <polygon points={pointString} fill={
