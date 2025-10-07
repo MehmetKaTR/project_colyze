@@ -34,7 +34,7 @@ flask-server/temp_frames
 flask-server/temp_texts
 flask-server/ml
 
-flask-server/routes/trials
+flask-server/routes/trials/
 
 flask-server/db/alembic/
 flask-server/db/alembic.ini
