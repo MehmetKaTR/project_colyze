@@ -89,19 +89,42 @@ def delete_type():
     type_no = data.get('TypeNo')
     prog_no = data.get('ProgNo')
 
-    if type_no is None or prog_no is None:
-        return jsonify({'error': 'TypeNo ve ProgNo gerekli!'}), 400
-
     session = get_session()
-    type_record = session.query(TypesF1).filter_by(TypeNo=type_no, ProgNo=prog_no).first()
 
-    if not type_record:
-        return jsonify({'error': 'Kayıt bulunamadı!'}), 404
+    try:
+        if type_no is None:
+            return jsonify({'error': 'TypeNo gerekli!'}), 400
 
-    session.delete(type_record)
-    session.commit()
+        # Eğer sadece type_no verilmişse → o type’a ait tüm kayıtları sil
+        if prog_no is None:
+            deleted_rows = session.query(TypesF1).filter_by(TypeNo=type_no).delete()
+            session.commit()
 
-    return jsonify({'message': 'Program başarıyla silindi'})
+            if deleted_rows == 0:
+                return jsonify({'error': f'Type {type_no} bulunamadı!'}), 404
+
+            return jsonify({
+                'message': f'Type {type_no} ve bağlı tüm programlar silindi ({deleted_rows} kayıt).'
+            })
+
+        # Eğer hem type_no hem prog_no varsa → sadece o kayıt silinir
+        type_record = session.query(TypesF1).filter_by(TypeNo=type_no, ProgNo=prog_no).first()
+
+        if not type_record:
+            return jsonify({'error': 'Kayıt bulunamadı!'}), 404
+
+        session.delete(type_record)
+        session.commit()
+
+        return jsonify({'message': f'Type {type_no}, Program {prog_no} başarıyla silindi.'})
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 
 # =================== PolySettingsF1 =====================
 @db_bp.route('/polysettings', methods=['POST'])

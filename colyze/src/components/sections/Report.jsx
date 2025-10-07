@@ -9,8 +9,6 @@ export const Report = () => {
   const [result, setResult] = useState("ALL");
   const [barcode, setBarcode] = useState("");
   const [results, setResults] = useState([]);
-
-  // 🔥 yeni state’ler
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -18,9 +16,7 @@ export const Report = () => {
     try {
       const response = await fetch("http://localhost:5050/get_results_to_db", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type_no: typeNo,
           prog_no: progNo,
@@ -32,10 +28,7 @@ export const Report = () => {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Sunucu hatası: " + response.status);
-      }
-
+      if (!response.ok) throw new Error("Sunucu hatası: " + response.status);
       const data = await response.json();
       setResults(data);
     } catch (err) {
@@ -50,17 +43,14 @@ export const Report = () => {
   };
 
   const handleExport = (type) => {
-    if (type === "pdf") {
-      exportPDF(results);
-    } else if (type === "excel") {
-      exportExcel(results);
-    }
+    if (type === "pdf") exportPDF(results);
+    else if (type === "excel") exportExcel(results);
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-20 p-6 space-y-6">
+    <div className="h-screen bg-gray-100 flex flex-col pt-20 p-6 space-y-4">
       {/* Üst Form */}
-      <div className="w-full border shadow rounded flex space-x-4 p-4 bg-white">
+      <div className="w-full border shadow rounded flex space-x-4 p-4 bg-white flex-none">
         <div className="w-1/2 grid grid-cols-2 grid-rows-3 gap-2">
           <div className="grid grid-cols-2">
             <input
@@ -69,8 +59,11 @@ export const Report = () => {
               onChange={(e) => setTypeNo(e.target.value)}
               className="w-full text-center rounded border text-black"
             />
-            <div className="flex items-center justify-center text-black">TYPE NO</div>
+            <div className="flex items-center justify-center text-black">
+              TYPE NO
+            </div>
           </div>
+
           <div className="grid grid-cols-2">
             <input
               type="number"
@@ -78,8 +71,11 @@ export const Report = () => {
               onChange={(e) => setProgNo(e.target.value)}
               className="w-full text-center rounded border text-black"
             />
-            <div className="flex items-center justify-center text-black">PROGRAM NO</div>
+            <div className="flex items-center justify-center text-black">
+              PROGRAM NO
+            </div>
           </div>
+
           <div className="grid grid-cols-2">
             <select
               value={measType}
@@ -90,8 +86,11 @@ export const Report = () => {
               <option value="Histogram">HIST</option>
               <option value="RGBI">RGBI</option>
             </select>
-            <div className="flex items-center justify-center text-black">MEASURE TYPE</div>
+            <div className="flex items-center justify-center text-black">
+              MEASURE TYPE
+            </div>
           </div>
+
           <div className="grid grid-cols-2">
             <select
               value={result}
@@ -102,10 +101,11 @@ export const Report = () => {
               <option value="NOK">NOK</option>
               <option value="ALL">ALL</option>
             </select>
-            <div className="flex items-center justify-center text-black">RESULT</div>
+            <div className="flex items-center justify-center text-black">
+              RESULT
+            </div>
           </div>
 
-          {/* 🔥 Yeni From-To tarih alanları */}
           <div className="grid grid-cols-2">
             <input
               type="date"
@@ -113,8 +113,11 @@ export const Report = () => {
               onChange={(e) => setFromDate(e.target.value)}
               className="w-full text-center rounded border text-black"
             />
-            <div className="flex items-center justify-center text-black">FROM</div>
+            <div className="flex items-center justify-center text-black">
+              FROM
+            </div>
           </div>
+
           <div className="grid grid-cols-2">
             <input
               type="date"
@@ -122,7 +125,9 @@ export const Report = () => {
               onChange={(e) => setToDate(e.target.value)}
               className="w-full text-center rounded border text-black"
             />
-            <div className="flex items-center justify-center text-black">TO</div>
+            <div className="flex items-center justify-center text-black">
+              TO
+            </div>
           </div>
         </div>
 
@@ -149,13 +154,13 @@ export const Report = () => {
               REFRESH
             </button>
             <button
-              onClick={() => handleExport("pdf")}
+              onClick={() => handleExport('pdf')}
               className="bg-yellow-500 text-white py-2 rounded hover:bg-yellow-600"
             >
               PDF
             </button>
             <button
-              onClick={() => handleExport("excel")}
+              onClick={() => handleExport('excel')}
               className="bg-gray-500 text-white py-2 rounded hover:bg-gray-600"
             >
               EXCEL
@@ -165,7 +170,7 @@ export const Report = () => {
       </div>
 
       {/* Alt Sonuç Tablosu */}
-      <div className="w-full bg-white border shadow rounded p-4 max-h-[600px] overflow-auto">
+      <div className="flex-1 w-full bg-white border shadow rounded p-4 overflow-auto">
         <ResultTable results={results} />
       </div>
     </div>

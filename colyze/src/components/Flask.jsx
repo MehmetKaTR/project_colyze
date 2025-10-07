@@ -93,11 +93,29 @@ export async function addProgram(typeNo, progNo, progName) {
   return res.json();
 }
 
+export async function addType(typeNo, typeName) {
+  const res = await fetch("http://localhost:5050/types", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ TypeNo: typeNo, ProgNo: 1, ProgName: typeName }),
+  });
+  return res.json();
+}
+
 export async function deleteProgram(typeNo, progNo) {
   const res = await fetch("http://localhost:5050/types", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ TypeNo: typeNo, ProgNo: progNo }),
+  });
+  return res.json();
+}
+
+export async function deleteType(typeNo) {
+  const res = await fetch("http://localhost:5050/types", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ TypeNo: typeNo }),
   });
   return res.json();
 }

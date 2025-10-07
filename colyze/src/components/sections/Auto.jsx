@@ -75,8 +75,8 @@ export const Auto = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-20 p-6 space-y-6">
-      <div className="w-full h-[500px] bg-white border shadow rounded flex items-center justify-center">
+    <div className="min-h-screen bg-gray-100 pt-20 p-6 space-y-4">
+      <div className="w-full h-[600px] bg-white border shadow rounded flex items-center justify-center">
         {focusedFrame ? (
           <img
             src={`http://localhost:5050${focusedFrame.path}`}

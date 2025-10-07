@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ProgramAddPopup } from './ProgramAddPopup';
 import { ProgramDeletePopup } from './ProgramDeletePopup';
-import { addProgram, deleteProgram } from "./Flask";
+import { addProgram, addType, deleteProgram, deleteType } from "./Flask";
+import { TypeAddPopup } from "./TypeAddPopup";
+import { TypeDeletePopup } from "./TypeDeletePopup";
 
 
 const ControlPanel = ({
@@ -25,8 +27,12 @@ const ControlPanel = ({
   const [selectedProgIndex, setSelectedProgIndex] = useState(0);
   const [editableName, setEditableName] = useState(progName || '');
 
-  const [showAddPopup, setShowAddPopup] = useState(false);
-  const [showDeletePopup, setShowDeletePopup] = useState(false);
+  const [showProgAddPopup, setShowProgAddPopup] = useState(false);
+  const [showProgDeletePopup, setShowProgDeletePopup] = useState(false);
+
+  const [showTypeAddPopup, setShowTypeAddPopup] = useState(false);
+  const [showTypeDeletePopup, setShowTypeDeletePopup] = useState(false);
+
   const [newProgName, setNewProgName] = useState("");
 
 
@@ -192,11 +198,21 @@ const ControlPanel = ({
         </div>
 
         <div className="flex flex-row items-stretch space-x-4">
-          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={() => setShowAddPopup(true)}>
+          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={() => setShowTypeAddPopup(true)}>
+            TYPE ADD
+          </button>
+
+          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={() => setShowTypeDeletePopup(true)}>
+            TYPE DELETE
+          </button>
+        </div>
+
+        <div className="flex flex-row items-stretch space-x-4">
+          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={() => setShowProgAddPopup(true)}>
             PROGRAM ADD
           </button>
 
-          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={() => setShowDeletePopup(true)}>
+          <button className="flex-1 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded shadow" onClick={() => setShowProgDeletePopup(true)}>
             PROGRAM DELETE
           </button>
         </div>
@@ -255,7 +271,7 @@ const ControlPanel = ({
               if (text === 'Device') deviceConfigurate();
               if (text === 'Properties') onCropModeToggle && onCropModeToggle();
             }}
-            className="transform rotate-90 whitespace-nowrap text-gray-600 cursor-pointer hover:text-blue-500 active:text-blue-700 active:shadow-inner active:shadow-blue-500 text-sm py-4"
+            className="transform rotate-90 p-3 rounded-xl whitespace-nowrap text-gray-600 cursor-pointer hover:text-blue-500 active:text-blue-700 active:shadow-inner active:shadow-blue-500 text-sm py-4"
           >
             {text}
           </div>
@@ -263,14 +279,29 @@ const ControlPanel = ({
       </div>
       
     <ProgramAddPopup
-      isOpen={showAddPopup}
-      onClose={() => setShowAddPopup(false)}
+      isOpen={showProgAddPopup}
+      onClose={() => setShowProgAddPopup(false)}
       defaultTypeNo={typesList[selectedTypeIndex]?.typeNo}
       lastProgNo={typesList[selectedTypeIndex]?.programs.slice(-1)[0]?.progNo ?? 0}
       onSave={async (typeNo, progNo, progName) => {
         const data = await addProgram(typeNo, progNo, progName);
         console.log(data);
-        setShowAddPopup(false);
+        setShowProgAddPopup(false);
+        if (typeof refreshTypes === "function") {
+          await refreshTypes();
+        }
+      }}
+    />
+
+    <TypeAddPopup
+      isOpen={showTypeAddPopup}
+      onClose={() => setShowTypeAddPopup(false)}
+      defaultProgNo={1}
+      lastTypeNo={typesList.length > 0 ? typesList[typesList.length - 1].typeNo : 0}
+      onSave={async (typeNo, _, typeName) => {
+        const data = await addType(typeNo, typeName);
+        console.log("Yeni type eklendi:", data);
+        setShowTypeAddPopup(false);
         if (typeof refreshTypes === "function") {
           await refreshTypes();
         }
@@ -278,8 +309,8 @@ const ControlPanel = ({
     />
 
     <ProgramDeletePopup
-      isOpen={showDeletePopup}
-      onClose={() => setShowDeletePopup(false)}
+      isOpen={showProgDeletePopup}
+      onClose={() => setShowProgDeletePopup(false)}
       typeNo={typesList[selectedTypeIndex]?.typeNo}
       progNo={typesList[selectedTypeIndex]?.programs[selectedProgIndex]?.progNo}
       progName={typesList[selectedTypeIndex]?.programs[selectedProgIndex]?.progName}
@@ -288,12 +319,28 @@ const ControlPanel = ({
         const p = t?.programs[selectedProgIndex];
         const data = await deleteProgram(t?.typeNo, p?.progNo);
         console.log(data);
-        setShowDeletePopup(false);
+        setShowProgDeletePopup(false);
         if (typeof refreshTypes === "function") {
           await refreshTypes();
         }
       }}
     />
+
+    <TypeDeletePopup
+      isOpen={showTypeDeletePopup}
+      onClose={() => setShowTypeDeletePopup(false)}
+      typeNo={typesList[selectedTypeIndex]?.typeNo}
+      onDelete={async () => {
+        const t = typesList[selectedTypeIndex];
+        const data = await deleteType(t?.typeNo);
+        console.log(data);
+        setShowTypeDeletePopup(false);
+        if (typeof refreshTypes === "function") {
+          await refreshTypes();
+        }
+      }}
+    />
+
     </>
   );
 };

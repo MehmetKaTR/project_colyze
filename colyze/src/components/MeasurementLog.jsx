@@ -12,7 +12,7 @@ const MeasurementLog = ({ results }) => {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-4 h-40 overflow-auto">
+    <div className="bg-white rounded-2xl shadow-lg p-4 h-60 overflow-auto">
       <h2 className="text-lg font-bold mb-2 text-gray-900">Measurement Log</h2>
       <table className="table-auto w-full border-collapse border border-gray-300 text-gray-900 text-sm">
         <thead>

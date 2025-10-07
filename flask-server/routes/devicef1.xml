@@ -1,7 +1,7 @@
 <device_state libver="3.4" filemajor="1" fileminor="0">
     <device name="DFK 37BUX178" base_name="DFK 37BUX178" unique_name="DFK 37BUX178 26420325">
         <videoformat>RGB32 (3072x2048)</videoformat>
-        <fps>1.</fps>
+        <fps>5.</fps>
         <fliph>0</fliph>
         <flipv>0</flipv>
         <vcdpropertyitems>

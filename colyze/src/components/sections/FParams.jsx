@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
 import ToolParameters from '../ToolParameters';
-import MeasurementResultTable from '../MeasurementResultTable';
+import {MeasurementResultTable} from '../MeasurementResultTable';
 import { getTypeProgNO, loadPolygonsFromDB, SaveFrameWithPolygons, sendPolygonsToCalculateRgbi, sendPolygonsToCalculateHistogram, captureSingleMeasurement, getTypes} from "../Flask";
 
 export const FParams = () => {
@@ -29,6 +29,8 @@ export const FParams = () => {
   const latestTypeNo = useRef(typeNo);
   const latestProgNo = useRef(progNo);
   const latestProgName = useRef(progName);
+
+  const [tableRefreshKey, setTableRefreshKey] = useState(0);
 
   useEffect(() => {
     latestTypeNo.current = typeNo;
@@ -61,82 +63,84 @@ export const FParams = () => {
   const refreshTypes = async () => {
     const types = await getTypes();
     setAllTypes(types);
+
+    setRgbiResults([""]);
+    setHistogramResults([""]);
+    setMeasurementType(""); 
+    setTableRefreshKey(prev => prev + 1);
   };
 
   /*
   // Backend'den typeNo ve progNo'yu /types endpoint'inden al, ilk kaydı kullan
   useEffect(() => {
-  const interval = setInterval(async () => {
-    try {
-      const types = await getTypes(); // [{TypeNo, ProgNo, ...}]
-      if (!types || types.length === 0) return;
+    const interval = setInterval(async () => {
+      try {
+        const types = await getTypes(); // [{TypeNo, ProgNo, ...}]
+        if (!types || types.length === 0) return;
 
-      setAllTypes(types);
+        setAllTypes(types);
 
-      const firstType = types[0];
-      const newTypeNo = firstType.TypeNo ?? firstType.type_no;
-      const newProgNo = firstType.ProgNo ?? firstType.program_no;
-      const newProgName = firstType.ProgName ?? firstType.program_name;
+        const firstType = types[0];
+        const newTypeNo = firstType.TypeNo ?? firstType.type_no;
+        const newProgNo = firstType.ProgNo ?? firstType.program_no;
+        const newProgName = firstType.ProgName ?? firstType.program_name;
 
-      if (newTypeNo == null || newProgNo == null) {
-        console.warn("TypeNo veya ProgNo null geldi:", firstType);
-        return;
+        if (newTypeNo == null || newProgNo == null) {
+          console.warn("TypeNo veya ProgNo null geldi:", firstType);
+          return;
+        }
+
+        if (newTypeNo !== latestTypeNo.current || newProgNo !== latestProgNo.current) {
+          await stopCamera(); // Kamerayı durdur
+          setTypeNo(newTypeNo);
+          setProgNo(newProgNo);
+          setProgName(newProgName)
+
+          await startCamera(); // Kamerayı tekrar başlat
+          console.log("typeNo/progNo değişti, kamera restart edildi:", newTypeNo, newProgNo);
+        }
+      } catch (err) {
+        console.error("Type fetch error:", err);
       }
+    }, 2000);
 
-      if (newTypeNo !== latestTypeNo.current || newProgNo !== latestProgNo.current) {
-        await stopCamera(); // Kamerayı durdur
+    return () => clearInterval(interval);
+  }, []);
+  */
+
+  // İlk açılışta typeNo/progNo'yu backend'den al
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const types = await getTypes(); // [{TypeNo, ProgNo, ...}]
+        if (!types || types.length === 0) return;
+
+        setAllTypes(types);
+
+        const firstType = types[0];
+        const newTypeNo = firstType.TypeNo ?? firstType.type_no;
+        const newProgNo = firstType.ProgNo ?? firstType.program_no;
+        const newProgName = firstType.ProgName ?? firstType.program_name;
+
+        if (newTypeNo == null || newProgNo == null) {
+          console.warn("TypeNo veya ProgNo null geldi:", firstType);
+          return;
+        }
+
         setTypeNo(newTypeNo);
         setProgNo(newProgNo);
-        setProgName(newProgName)
+        setProgName(newProgName);
 
-        await startCamera(); // Kamerayı tekrar başlat
-        console.log("typeNo/progNo değişti, kamera restart edildi:", newTypeNo, newProgNo);
+        await stopCamera(); // önce kamerayı durdur
+        await startCamera(); // sonra tekrar başlat
+        console.log("İlk init yapıldı, kamera restart edildi:", newTypeNo, newProgNo);
+      } catch (err) {
+        console.error("Type fetch error:", err);
       }
-    } catch (err) {
-      console.error("Type fetch error:", err);
-    }
-  }, 2000);
+    };
 
-  return () => clearInterval(interval);
-}, []);
-*/
-
-// İlk açılışta typeNo/progNo'yu backend'den al
-const initializeCameraTypes = async () => {
-  try {
-    const types = await getTypes(); // [{TypeNo, ProgNo, ...}]
-    if (!types || types.length === 0) return;
-
-    setAllTypes(types);
-
-    const firstType = types[0];
-    const newTypeNo = firstType.TypeNo ?? firstType.type_no;
-    const newProgNo = firstType.ProgNo ?? firstType.program_no;
-    const newProgName = firstType.ProgName ?? firstType.program_name;
-
-    if (newTypeNo == null || newProgNo == null) {
-      console.warn("TypeNo veya ProgNo null geldi:", firstType);
-      return;
-    }
-
-    setTypeNo(newTypeNo);
-    setProgNo(newProgNo);
-    setProgName(newProgName);
-
-    // Kamera resetle
-    await stopCamera();
-    await startCamera();
-
-    console.log("İlk init yapıldı, kamera restart edildi:", newTypeNo, newProgNo);
-  } catch (err) {
-    console.error("Type fetch error:", err);
-  }
-};
-
-// useEffect içinde sadece fonksiyon çağrısı
-useEffect(() => {
-  initializeCameraTypes();
-}, []);
+    init();
+  }, []);
 
   // Poligonları DB'den yükle
   useEffect(() => {
@@ -222,7 +226,7 @@ useEffect(() => {
       x: (e.clientX - rect.left - 16 - cameraOffset.x) / scale,
       y: (e.clientY - rect.top - 16 - cameraOffset.y) / scale,
     };
-
+    
     // Burada sadece polygon nesnesini gönderiyoruz
     const foundPolygon = polygons.find(polygon =>
       isPointInPolygon(clickPoint, polygon)
@@ -234,7 +238,6 @@ useEffect(() => {
       setFocusedId(null);
     }
   };
-
 
   const deleteFocusedPolygon = async () => {
     if (focusedId !== null) {
@@ -658,7 +661,7 @@ useEffect(() => {
     }
   };
 
-/*
+  /*
   const HistCalculate = async () => {
     try {
       // datetime'ı oluştur
@@ -713,7 +716,7 @@ useEffect(() => {
       alert("Histogram ölçüm hatası.");
     }
   };
-*/
+  */
 
   const HistCalculate = async () => {
     const imageElement = document.getElementById("camera-frame");
@@ -797,8 +800,6 @@ useEffect(() => {
   };
 
 
-
-
   const HistTeach = async () => {
     const imageElement = document.getElementById("camera-frame");
     if (!imageElement) {
@@ -871,6 +872,7 @@ useEffect(() => {
               i: r.intensity,
               status: r.status,
             }))}
+            refreshKey={tableRefreshKey}
           />
         );
       case "HIST":
@@ -891,7 +893,7 @@ useEffect(() => {
         return (
           <MeasurementResultTable
             title="MEASUREMENT RESULTS"
-            columns={["ID", "R", "G", "B", "I", "Status"]}
+            columns={["-", "-", "-", "-", "-", "-"]}
             data={[]}
           />
         );
@@ -939,6 +941,10 @@ useEffect(() => {
           setTypeNo(newTypeNo);
           setProgNo(newProgNo);
           setProgName(newProgName);
+
+
+          await refreshTypes();
+          
 
           // Kamera resetle
           await stopCamera();

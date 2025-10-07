@@ -1,13 +1,16 @@
-import React from "react";
-
-export const MeasurementResultTable = ({ title = "MEASUREMENT RESULTS", columns = [], data = [] }) => {
+export const MeasurementResultTable = ({
+  title = "MEASUREMENT RESULTS",
+  columns = [],
+  data = [],
+  refreshKey = 0 // yeni prop
+}) => {
   return (
     <div className="w-full h-[30vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
       <span className="flex justify-center items-center text-black font-bold mb-1">
         {title}
       </span>
 
-      <div className="h-full overflow-auto">
+      <div className="h-full overflow-auto" key={refreshKey}>
         {data.length === 0 ? (
           <p className="text-center">No results yet.</p>
         ) : (
@@ -45,5 +48,3 @@ export const MeasurementResultTable = ({ title = "MEASUREMENT RESULTS", columns 
     </div>
   );
 };
-
-export default MeasurementResultTable;

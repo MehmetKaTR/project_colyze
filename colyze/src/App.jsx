@@ -21,7 +21,7 @@ function App() {
         } bg-black text-gray-100`}
       >
         
-        <Navbar menuOpen={menuOpen} setMenuOpen={setMenuOpen} setActiveTab={setActiveTab} />
+        <Navbar menuOpen={menuOpen} setMenuOpen={setMenuOpen} activeTab={activeTab} setActiveTab={setActiveTab} />
         <MobileMenu menuOpen={menuOpen} setMenuOpen={setMenuOpen} setActiveTab={setActiveTab} />
         {/*
         {activeTab === "auto" && <Auto />}
@@ -29,10 +29,14 @@ function App() {
         {activeTab === "report" && <Report />}
         */}
 
-        <div className={activeTab === "auto" ? "block" : "hidden"}>
-          <Auto />
-        </div>
-        <div className={activeTab === "f1" ? "block" : "hidden"}>
+        {activeTab === "auto" ? (
+          <div className="block">
+            <Auto key={Date.now()} />
+          </div>
+        ) : (
+          <div className="hidden"></div>
+        )}
+        <div className={activeTab === "measure" ? "block" : "hidden"}>
           <FParams />
         </div>
         <div className={activeTab === "report" ? "block" : "hidden"}>
