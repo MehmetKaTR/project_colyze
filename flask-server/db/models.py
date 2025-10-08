@@ -14,6 +14,7 @@ class HistTeach(Base):
     Channel = Column(String)
     Bin_Index = Column(Integer)
     Values = Column(Integer)
+    Hist_Tolerance = Column(Integer)
 
     def as_dict(self):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}

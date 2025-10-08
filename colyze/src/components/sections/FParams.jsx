@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Camera from "../Camera";
 import ControlPanel from "../ControlPanel";
-import ToolParameters from '../ToolParameters';
+import  ToolParameters   from '../ToolParameters';
 import {MeasurementResultTable} from '../MeasurementResultTable';
 import { getTypeProgNO, loadPolygonsFromDB, SaveFrameWithPolygons, sendPolygonsToCalculateRgbi, sendPolygonsToCalculateHistogram, captureSingleMeasurement, getTypes} from "../Flask";
 
@@ -18,6 +18,7 @@ export const FParams = () => {
   const [focusedId, setFocusedId] = useState(null);
   const [cropMode, setCropMode] = useState(false);
   const [tolerance, setTolerance] = useState(null);
+  const [histTolerance, setHistTolerance] = useState({});
   const [measurementType, setMeasurementType] = useState(null);
   const [rgbiResults, setRgbiResults] = useState([]);
   const [histogramResults, setHistogramResults] = useState([]);
@@ -172,6 +173,14 @@ export const FParams = () => {
           `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}-${pad(now.getMilliseconds(), 3)}`;
   };
 
+  const getFormattedTime = () => {
+    const now = new Date();
+
+    const pad = (n, z = 2) => String(n).padStart(z, '0');
+
+    return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  };
+
   const addPolygon = () => {
     setPolygons((prevPolygons) => {
       const baseX = 200 + prevPolygons.length * 20;
@@ -316,7 +325,6 @@ export const FParams = () => {
     const results = await sendPolygonsToCalculateRgbi({
       typeNo,
       progNo,
-      tolerance,
       setRgbiResults, 
       imageDataUrl,
       datetime,
@@ -591,7 +599,7 @@ export const FParams = () => {
         allResults.push(result);
         await new Promise(res => setTimeout(res, 200));
       }
-
+console.log("LAAAANANANANANANANA", polygons)
       const averagedResults = allResults[0].map((_, idx) => {
         const id = allResults[0][idx].id;
         let sum_r = 0, sum_g = 0, sum_b = 0, sum_i = 0;
@@ -609,6 +617,7 @@ export const FParams = () => {
           intensity: sum_i / allResults.length,
         };
       });
+      console.log("LAAAANANANANANANANA", polygons)
 
       const toleranceLimits = averagedResults.map(r => {
         const poly = polygons.find(p => p.id === r.id);
@@ -633,6 +642,7 @@ export const FParams = () => {
           tole_i: tol_i,
         };
       });
+      
 
       setTolerance(toleranceLimits);
 
@@ -660,6 +670,51 @@ export const FParams = () => {
       alert("Teaching failed.");
     }
   };
+
+
+  const TeachTheHist = async (typeNo, progNo, imageElement, setHistTolerance, polygons) => {
+    try {
+      if (!imageElement) {
+        alert("Kamera görüntüsü bulunamadı.");
+        return;
+      }
+
+      // Polygon başına averagedResults oluştur (RGBI gibi değil sadece tolerance için)
+      const toleranceLimits = polygons.map(poly => ({
+        id: poly.id,
+        hist_tol: poly?.hist_tolerance ?? 0.1, // default 0.1
+      }));
+
+      setHistTolerance(toleranceLimits.reduce((acc, cur) => {
+        acc[cur.id] = cur.hist_tol;
+        return acc;
+      }, {}));
+
+      // 🔁 DB'ye kaydet
+      const saveResponse = await fetch("http://localhost:5050/save_hist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          measurements: toleranceLimits,
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        const errText = await saveResponse.text();
+        console.error("❌ HIST kayıt hatası:", errText);
+        alert("HIST kayıt hatası!");
+      } else {
+        alert("Teaching ve histogram toleransları başarıyla kaydedildi!");
+      }
+
+    } catch (err) {
+      console.error("Teach failed:", err);
+      alert("Teaching failed.");
+    }
+  };
+
 
   /*
   const HistCalculate = async () => {
@@ -738,7 +793,6 @@ export const FParams = () => {
     const results = await sendPolygonsToCalculateHistogram({
       typeNo,
       progNo,
-      tolerance,
       setHistogramResults,
       imageDataUrl,
       datetime,
@@ -775,6 +829,9 @@ export const FParams = () => {
 
       // Gelen tüm histogramları save_histogram'a yolla
       for (const item of result.histograms) {
+        const poly = polygons.find(p => p.id === item.toolId);
+        //const histTolerance = poly?.hist_tolerance ?? 0.1; // Polygon’dan al, yoksa default
+
         const saveResponse = await fetch("http://localhost:5050/save_histogram", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -783,6 +840,7 @@ export const FParams = () => {
             progNo,
             toolId: item.toolId,
             histogram: item.histogram,
+            //histTolerance, // ✅ burayı ekledik
           }),
         });
 
@@ -800,26 +858,38 @@ export const FParams = () => {
   };
 
 
+
   const HistTeach = async () => {
     const imageElement = document.getElementById("camera-frame");
     if (!imageElement) {
       alert("Kamera görüntüsü yok");
       return;
     }
+
     const canvas = document.createElement('canvas');
     canvas.width = imageElement.width;
     canvas.height = imageElement.height;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
     const imageDataUrl = canvas.toDataURL('image/jpeg');
-    
+
+
+    const polygonsWithTolerance = polygons.map(p => ({
+      ...p,
+      hist_tolerance: p.hist_tolerance ?? 0.1, // default 0.1
+    }));
+
+
     await sendPolygonsToTeachHistogram({
       typeNo,
       progNo,
-      polygons,
-      image: imageDataUrl,   // burası artık base64 string
+      polygons: polygonsWithTolerance,
+      image: imageDataUrl,
     });
+
+    await TeachTheHist(typeNo, progNo, imageElement, setHistTolerance, polygonsWithTolerance);
   };
+
 
   const MLTeach = async () => {
     try {
@@ -873,6 +943,7 @@ export const FParams = () => {
               status: r.status,
             }))}
             refreshKey={tableRefreshKey}
+            timeLog={getFormattedTime()}
           />
         );
       case "HIST":
@@ -887,6 +958,8 @@ export const FParams = () => {
               "diff b": r.diff_b,
               status: r.status,
             }))}
+            refreshKey={tableRefreshKey}
+            timeLog={getFormattedTime()}
           />
         );
       default:
@@ -902,7 +975,7 @@ export const FParams = () => {
 
 
   return (
-      <section className="min-h-screen pt-20 px-8 pb-8 bg-white text-white">
+      <section className="min-h-screen pt-20 px-6 pb-8 bg-white text-white">
         <div className="flex space-x-4 space-y-4">
           <div
           ref={cameraContainerRef}
@@ -935,6 +1008,7 @@ export const FParams = () => {
           onCalculate={measureFuncs}
           onTeach={teachFuncs}
           refreshTypes={refreshTypes}
+          setMeasurementType={setMeasurementType}
           onCropModeToggle={() => setCropMode(prev => !prev)} // burada toggle'ı gönderiyorsun
           onTypeProgramChange={async (newTypeNo, newProgNo, newProgName) => {
           // State güncelle
@@ -964,6 +1038,7 @@ export const FParams = () => {
             focusedId={focusedId}
             setFocusedId={setFocusedId}
             resetPolygonPosition={resetPolygonPosition}
+            measurementType={measurementType}
           />
         </div>
 

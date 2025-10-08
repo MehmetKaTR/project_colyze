@@ -18,7 +18,8 @@ const ControlPanel = ({
   onTeach = {},
   onCropModeToggle,
   onTypeProgramChange, 
-  refreshTypes
+  refreshTypes,
+  setMeasurementType
 }) => {
   const initialMethod = Object.keys(onCalculate)[0] || '';
   const [selectedMethod, setSelectedMethod] = useState(initialMethod);
@@ -88,6 +89,7 @@ const ControlPanel = ({
   }, [typesList, typeNo, progNo, progName]);
 
   const handleCalculate = () => {
+    console.log(selectedMethod)
     if (onCalculate[selectedMethod]) onCalculate[selectedMethod]();
     else alert('Seçilen Measure fonksiyonu bulunamadı!');
   };
@@ -237,7 +239,11 @@ const ControlPanel = ({
           <select
             className="flex-1 bg-white text-gray-800 font-semibold py-2 px-3 rounded shadow"
             value={selectedMethod}
-            onChange={(e) => setSelectedMethod(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedMethod(val);      // mevcut method’u güncelle
+              setMeasurementType(val.toUpperCase());     // measurementType’ı da güncelle
+            }}
           >
             {Object.keys(onCalculate).map((method) => (
               <option key={method} value={method}>

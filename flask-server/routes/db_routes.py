@@ -225,7 +225,7 @@ def get_tools_by_typeprog():
             tools[t.ToolNo] = []
         tools[t.ToolNo].append({'x': t.X, 'y': t.Y})
 
-    result = [{'id': tool_no, 'points': points, 'status': 'empty'} for tool_no, points in tools.items()]
+    result = [{'id': tool_no, 'points': points, 'status': 'empty', "hist_tolerance": 0.1} for tool_no, points in tools.items()]
     return jsonify(result)
 
 
@@ -362,6 +362,7 @@ def save_histogram():
     prog_no = data.get("progNo")
     tool_id = data.get("toolId")
     histogram = data.get("histogram")
+    #hist_tolerance = float(data.get("histTolerance", 0.1))  # Default 0.1
 
     if not all([type_no, prog_no, tool_id, histogram]):
         return jsonify({"error": "Eksik veri"}), 400
@@ -379,12 +380,14 @@ def save_histogram():
                 Tool_ID=str(tool_id),
                 Channel=channel.upper(),
                 Bin_Index=i,
-                Values=float(val)
+                Values=float(val),
+                #Hist_Tolerance=hist_tolerance  # ✅ artık db’ye kaydediliyor
             )
             session.add(hist)
 
     session.commit()
     return jsonify({"status": "OK", "message": "Teach histogram güncellendi"})
+
 
 
 @db_bp.route('/get_histogram_teach')
@@ -396,17 +399,28 @@ def get_histograms():
         return jsonify({"error": "Eksik parametre"}), 400
 
     session = get_session()
-    rows = session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no).order_by(HistTeach.Tool_ID, HistTeach.Channel, HistTeach.Bin_Index).all()
+    rows = session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no)\
+        .order_by(HistTeach.Tool_ID, HistTeach.Channel, HistTeach.Bin_Index).all()
 
     data = {}
-    print("rows", rows)
+    tolerance_dict = {}  # tool bazlı tolerans
     for row in rows:
         key = str(row.Tool_ID)
         if key not in data:
             data[key] = {"r": [0]*256, "g": [0]*256, "b": [0]*256}
+            # hist_tolerance değerini al, yoksa default 0.1
+            tolerance_dict[key] = float(getattr(row, "Hist_Tolerance", 0.1))
         data[key][row.Channel.lower()][row.Bin_Index] = float(row.Values)
 
-    response = [{"toolId": tool_id, "histogram": hist} for tool_id, hist in data.items()]
+    # JSON yanıtında her tool için histogram + hist_tolerance
+    response = []
+    for tool_id, hist in data.items():
+        response.append({
+            "toolId": tool_id,
+            "histogram": hist,
+            "hist_tolerance": tolerance_dict.get(tool_id, 0.1)
+        })
+
     print("get_histo_py", response)
     return jsonify(response)
 
@@ -533,6 +547,33 @@ def save_rgbi():
 
     session.commit()
     return jsonify({"status": "OK", "message": "RGBI değerleri kaydedildi"})
+
+
+@db_bp.route('/save_hist', methods=['POST'])
+def save_hist():
+    data = request.get_json()
+    type_no = data.get("typeNo")
+    prog_no = data.get("progNo")
+    measurements = data.get("measurements")  # [{id, hist_tol}, ...]
+
+    if not all([type_no, prog_no, measurements]):
+        return jsonify({"error": "Eksik veri"}), 400
+
+    print("BURAYA BAK LAN",measurements)
+    session = get_session()
+    for m in measurements:
+        tool_id = m["id"]
+        hist_tol = float(m.get("hist_tol", 0.1))  # default 0.1
+
+        # İlgili TypeNo, ProgNo, Tool_ID için tüm eski histogramları güncelle
+        session.query(HistTeach).filter_by(
+            TypeNo=type_no,
+            ProgNo=prog_no,
+            Tool_ID=tool_id
+        ).update({"Hist_Tolerance": hist_tol})
+
+    session.commit()
+    return jsonify({"status": "OK", "message": "Histogram toleransları kaydedildi"})
 
 
 # =================== SaveResults =====================

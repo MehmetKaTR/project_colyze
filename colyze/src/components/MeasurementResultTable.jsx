@@ -2,12 +2,14 @@ export const MeasurementResultTable = ({
   title = "MEASUREMENT RESULTS",
   columns = [],
   data = [],
-  refreshKey = 0 // yeni prop
+  refreshKey = 0, // yeni prop
+  timeLog
 }) => {
   return (
     <div className="w-full h-[30vh] bg-gray-200 rounded-xl p-8 shadow-xl text-black relative">
-      <span className="flex justify-center items-center text-black font-bold mb-1">
-        {title}
+      <span className="flex justify-center items-center text-black mb-1">
+        <span className="font-bold">{title}</span>
+        <span className="text-gray-500 ml-2">{timeLog}</span>
       </span>
 
       <div className="h-full overflow-auto" key={refreshKey}>

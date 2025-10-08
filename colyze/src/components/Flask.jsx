@@ -340,10 +340,10 @@ export const sendPolygonsToCalculateHistogram = async ({
       return;
     }
 
-    const teachData = await teachRes.json();
-    console.log("teachData", teachData)
+    const teachData = teachRes.ok ? await teachRes.json() : [];
 
-    // Görselden histogram hesaplat
+    console.log("olcum oncesi", teachData)
+
     const response = await fetch("http://localhost:5050/calculate_histogram", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -356,8 +356,17 @@ export const sendPolygonsToCalculateHistogram = async ({
       }),
     });
 
+    const data = await response.json();
+    const { teach_missing, results } = data;
 
-    const results = await response.json();
+    if (!results.length) {
+      alert("Histogram sonucu alınamadı (backend boş döndü).");
+      return;
+    }
+
+    if (teach_missing) {
+      alert("Teach verisi bulunamadı. Ölçüm tamamlandı ancak karşılaştırma yapılamadı.");
+    }
 
     // Histogram karşılaştırması ve kontrol
     const checkedResults = results.map((tool) => {
@@ -376,7 +385,7 @@ export const sendPolygonsToCalculateHistogram = async ({
     };
 
     const avgDiff = (diff.r + diff.g + diff.b) / 3;
-    const isOk = avgDiff < 0.1;
+    const isOk = avgDiff < (teach?.hist_tolerance ?? 0.1);
 
     return {
       ...tool,

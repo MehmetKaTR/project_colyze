@@ -801,34 +801,39 @@ def calculate_histogram():
         prog_no = data.get("progNo")
         polygons = data.get("polygons")
         image_data_url = data.get("image")
-        teach_histograms = data.get("teachHistograms")  
+        teach_histograms = data.get("teachHistograms")
 
-        if not all([type_no, prog_no, polygons, image_data_url, teach_histograms]):
+        print("piton polygons", polygons)
+
+        if not all([type_no, prog_no, polygons, image_data_url]):
             return jsonify({"error": "Eksik veri"}), 400
 
+        teach_missing = not bool(teach_histograms)
+        teach_dict = {}
+        if not teach_missing:
+            try:
+                teach_dict = {str(item["toolId"]): item["histogram"] for item in teach_histograms}
+            except Exception:
+                teach_missing = True
+
+        # Görsel çöz
         header, encoded = image_data_url.split(",", 1)
-        image_bytes = base64.b64decode(encoded)
-        frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+        frame = cv2.imdecode(np.frombuffer(base64.b64decode(encoded), np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             return jsonify({'error': 'Görüntü çözülemedi'}), 500
 
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = rgb_frame.shape
 
-        tolerance_threshold = 0.1
-
         results = []
 
-        teach_dict = {str(item["toolId"]): item["histogram"] for item in teach_histograms}
-        print("teach_dict",teach_dict)
-
         for poly in polygons:
-            poly_id = str(poly.get("id"))  # Burada str yaptık!
-            print("id", poly_id)
+            poly_id = str(poly.get("id"))
             points = poly.get("points")
-            if not points or poly_id not in teach_dict:
-                print("nasıl amk", poly_id)
-                results.append({ "id": poly_id, "status": "NOK", "reason": "Teach verisi yok" })
+            tolerance_threshold = poly.get("hist_tolerance", 0.1)  # her polygon için ayrı
+
+            if not points:
+                results.append({"id": poly_id, "status": "NOK", "reason": "Poligon eksik"})
                 continue
 
             coords = [(int(p["x"]), int(p["y"])) for p in points]
@@ -836,39 +841,57 @@ def calculate_histogram():
             cv2.fillPoly(mask, [np.array(coords)], 255)
             masked = cv2.bitwise_and(rgb_frame, rgb_frame, mask=mask)
 
-            r_hist = cv2.calcHist([masked], [0], mask, [256], [0, 256])
-            g_hist = cv2.calcHist([masked], [1], mask, [256], [0, 256])
-            b_hist = cv2.calcHist([masked], [2], mask, [256], [0, 256])
+            r_hist = cv2.normalize(cv2.calcHist([masked], [0], mask, [256], [0, 256]), None).flatten().tolist()
+            g_hist = cv2.normalize(cv2.calcHist([masked], [1], mask, [256], [0, 256]), None).flatten().tolist()
+            b_hist = cv2.normalize(cv2.calcHist([masked], [2], mask, [256], [0, 256]), None).flatten().tolist()
 
-            r_hist = cv2.normalize(r_hist, r_hist).flatten()
-            g_hist = cv2.normalize(g_hist, g_hist).flatten()
-            b_hist = cv2.normalize(b_hist, b_hist).flatten()
+            # Teach yoksa sadece ölçüm döndür
+            if teach_missing or poly_id not in teach_dict:
+                results.append({
+                    "id": poly_id,
+                    "status": "MEASURED",
+                    "reason": "Teach verisi yok",
+                    "diff_r": None,
+                    "diff_g": None,
+                    "diff_b": None,
+                    "r_hist": r_hist,
+                    "g_hist": g_hist,
+                    "b_hist": b_hist,
+                })
+                continue
 
+            # Teach varsa karşılaştır
             teach_r = np.array(teach_dict[poly_id]["r"])
             teach_g = np.array(teach_dict[poly_id]["g"])
             teach_b = np.array(teach_dict[poly_id]["b"])
 
-            diff_r = np.linalg.norm(r_hist - teach_r)
-            diff_g = np.linalg.norm(g_hist - teach_g)
-            diff_b = np.linalg.norm(b_hist - teach_b)
+            diff_r = float(np.linalg.norm(np.array(r_hist) - teach_r))
+            diff_g = float(np.linalg.norm(np.array(g_hist) - teach_g))
+            diff_b = float(np.linalg.norm(np.array(b_hist) - teach_b))
 
+            # Polygon kendi hist_tolerance değeri ile kontrol edilir
             is_ok = all(diff < tolerance_threshold for diff in [diff_r, diff_g, diff_b])
 
             results.append({
                 "id": poly_id,
                 "status": "OK" if is_ok else "NOK",
-                "diff_r": round(float(diff_r), 4),
-                "diff_g": round(float(diff_g), 4),
-                "diff_b": round(float(diff_b), 4),
+                "diff_r": round(diff_r, 4),
+                "diff_g": round(diff_g, 4),
+                "diff_b": round(diff_b, 4),
+                "r_hist": r_hist,
+                "g_hist": g_hist,
+                "b_hist": b_hist,
             })
 
-        return jsonify(results)
+        return jsonify({
+            "teach_missing": teach_missing,
+            "results": results
+        })
 
     except Exception as e:
         import traceback
         print("🔴 measure_histogram HATASI:\n", traceback.format_exc())
-        return jsonify({ "error": str(e) }), 500
-
+        return jsonify({"error": str(e), "results": []}), 500
 
 
 @camera_bp.route('/teach_histogram', methods=['POST'])
