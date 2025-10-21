@@ -113,7 +113,8 @@ Frontend: http://localhost:5173/ (veya Vite config’de ayarladığınız path)
 
 Backend API: http://127.0.0.1:5000/
 
-NOT: Database olmadan sağlıklı çalışmaz. İletişime geçiniz
+NOT1: Database olmadan sağlıklı çalışmaz. İletişime geçiniz
+NOT2: Windows uygulaması için lütfen Ağasan ile iletişime geçiniz.
 
 
 
