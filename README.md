@@ -12,11 +12,9 @@ Project Colyze is a **web-based part measurement and inspection system** that co
 - **Dual Database Support (optional):** Store part images and results for historical tracking.
 - **Photo Comparison:** Visualize the part **before** and **after** measurement.
 
-- ![image](https://github.com/user-attachments/assets/49171c01-57e4-42f3-86b7-7b6239e97013)
-- <img width="1902" height="1079" alt="auto" src="https://github.com/user-attachments/assets/55b70376-75b3-4e61-bfa4-aaa5823aedbb" />
-
-
-- ![image](https://github.com/user-attachments/assets/69abdb27-4a11-4c25-a25c-6662716ce6ae)
+  <img width="1902" height="1079" alt="auto" src="https://github.com/user-attachments/assets/55b70376-75b3-4e61-bfa4-aaa5823aedbb" />
+  <img width="1905" height="1079" alt="measure" src="https://github.com/user-attachments/assets/498e2b09-0352-4e20-b41d-1be4fe5e210a" />
+  <img width="1919" height="1079" alt="report" src="https://github.com/user-attachments/assets/63152c18-d1f1-45e4-880e-e92d339ca901" />
 
 ---
 
