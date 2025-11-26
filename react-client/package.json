@@ -1,0 +1,87 @@
+{
+  "name": "colyze",
+  "version": "1.0.2",
+  "description": "Colyze Windows App 1.0.2 : Redesigned results of histogram of table that show on auto page",
+  "author": "Mehmet Kaan Genç",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "start": "electron .",
+    "build:web": "vite build",
+    "build:electron": "npm run build:web && electron-builder"
+  },
+  "build": {
+    "appId": "com.colyze.app",
+    "productName": "Colyze",
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist_electron"
+    },
+    "files": [
+      "main.cjs",
+      "preload.js",
+      {
+        "from": "dist",
+        "to": "build"
+      },
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "flask-server",
+        "to": "flask-server",
+        "filter": ["**/*"]
+      }
+    ],
+    "asar": false,
+    "win": {
+      "target": "nsis",
+      "icon": "colyze_logo.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Colyze"
+    }
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.3",
+    "axios": "^1.10.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "emailjs-com": "^3.2.0",
+    "express": "^5.1.0",
+    "file-saver": "^2.0.5",
+    "fs": "^0.0.1-security",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
+    "jspdf-autotable": "^5.0.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-draggable": "^4.4.6",
+    "react-icons": "^5.5.0",
+    "react-rnd": "^10.5.2",
+    "react-router-dom": "^7.6.2",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "@tailwindcss/postcss": "^4.1.14",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.21",
+    "electron": "^38.1.0",
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.21.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "gh-pages": "^6.3.0",
+    "globals": "^15.15.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.14",
+    "vite": "^6.2.0"
+  }
+}

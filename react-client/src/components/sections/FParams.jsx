@@ -1,0 +1,1051 @@
+import { useState, useEffect, useRef } from "react";
+import Camera from "../Camera";
+import ControlPanel from "../ControlPanel";
+import  ToolParameters   from '../ToolParameters';
+import {MeasurementResultTable} from '../MeasurementResultTable';
+import { getTypeProgNO, loadPolygonsFromDB, SaveFrameWithPolygons, sendPolygonsToCalculateRgbi, sendPolygonsToCalculateHistogram, captureSingleMeasurement, getTypes} from "../Flask";
+
+export const FParams = () => {
+  const cameraContainerRef = useRef(null);
+  const [typeNo, setTypeNo] = useState(null);
+  const [progNo, setProgNo] = useState(null);
+  const [progName, setProgName] = useState(null);
+  const [prevTypeNo, setPrevTypeNo] = useState(null);
+  const [prevProgNo, setPrevProgNo] = useState(null);
+  const [prevProgName, setPrevProgName] = useState(null);
+  const [polygons, setPolygons] = useState([]);
+  // const [mlPolygons, setMlPolygons] = useState([]);
+  const [focusedId, setFocusedId] = useState(null);
+  const [cropMode, setCropMode] = useState(false);
+  const [tolerance, setTolerance] = useState(null);
+  const [histTolerance, setHistTolerance] = useState({});
+  const [measurementType, setMeasurementType] = useState(null);
+  const [rgbiResults, setRgbiResults] = useState([]);
+  const [histogramResults, setHistogramResults] = useState([]);
+  const [allTypes, setAllTypes] = useState([]);
+
+  const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
+
+  const latestTypeNo = useRef(typeNo);
+  const latestProgNo = useRef(progNo);
+  const latestProgName = useRef(progName);
+
+  const [tableRefreshKey, setTableRefreshKey] = useState(0);
+
+  useEffect(() => {
+    latestTypeNo.current = typeNo;
+    latestProgNo.current = progNo;
+    latestProgName.current = progName;
+  }, [typeNo, progNo, progName]);
+
+  // Kamerayı başlatan fonksiyon
+  const startCamera = async () => {
+    try {
+      const res = await fetch("http://localhost:5050/start_camera");
+      const data = await res.json();
+      console.log("Camera start:", data.status || data.error);
+    } catch (err) {
+      console.error("Camera start error:", err);
+    }
+  };
+
+  // Kamerayı durduran fonksiyon
+  const stopCamera = async () => {
+    try {
+      const res = await fetch("http://localhost:5050/stop_camera");
+      const data = await res.json();
+      console.log("Camera stop:", data.status || data.error);
+    } catch (err) {
+      console.error("Camera stop error:", err);
+    }
+  };
+
+  const refreshTypes = async () => {
+    const types = await getTypes();
+    setAllTypes(types);
+
+    setRgbiResults([""]);
+    setHistogramResults([""]);
+    setMeasurementType(""); 
+    setTableRefreshKey(prev => prev + 1);
+  };
+
+  /*
+  // Backend'den typeNo ve progNo'yu /types endpoint'inden al, ilk kaydı kullan
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const types = await getTypes(); // [{TypeNo, ProgNo, ...}]
+        if (!types || types.length === 0) return;
+
+        setAllTypes(types);
+
+        const firstType = types[0];
+        const newTypeNo = firstType.TypeNo ?? firstType.type_no;
+        const newProgNo = firstType.ProgNo ?? firstType.program_no;
+        const newProgName = firstType.ProgName ?? firstType.program_name;
+
+        if (newTypeNo == null || newProgNo == null) {
+          console.warn("TypeNo veya ProgNo null geldi:", firstType);
+          return;
+        }
+
+        if (newTypeNo !== latestTypeNo.current || newProgNo !== latestProgNo.current) {
+          await stopCamera(); // Kamerayı durdur
+          setTypeNo(newTypeNo);
+          setProgNo(newProgNo);
+          setProgName(newProgName)
+
+          await startCamera(); // Kamerayı tekrar başlat
+          console.log("typeNo/progNo değişti, kamera restart edildi:", newTypeNo, newProgNo);
+        }
+      } catch (err) {
+        console.error("Type fetch error:", err);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+  */
+
+  // İlk açılışta typeNo/progNo'yu backend'den al
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const types = await getTypes(); // [{TypeNo, ProgNo, ...}]
+        if (!types || types.length === 0) return;
+
+        setAllTypes(types);
+
+        const firstType = types[0];
+        const newTypeNo = firstType.TypeNo ?? firstType.type_no;
+        const newProgNo = firstType.ProgNo ?? firstType.program_no;
+        const newProgName = firstType.ProgName ?? firstType.program_name;
+
+        if (newTypeNo == null || newProgNo == null) {
+          console.warn("TypeNo veya ProgNo null geldi:", firstType);
+          return;
+        }
+
+        setTypeNo(newTypeNo);
+        setProgNo(newProgNo);
+        setProgName(newProgName);
+
+        await stopCamera(); // önce kamerayı durdur
+        await startCamera(); // sonra tekrar başlat
+        console.log("İlk init yapıldı, kamera restart edildi:", newTypeNo, newProgNo);
+      } catch (err) {
+        console.error("Type fetch error:", err);
+      }
+    };
+
+    init();
+  }, []);
+
+  // Poligonları DB'den yükle
+  useEffect(() => {
+    const init = async () => {
+      if (typeNo !== null && progNo !== null) {
+        let loaded;
+        if (typeNo !== prevTypeNo || progNo !== prevProgNo) {
+          loaded = await loadPolygonsFromDB(typeNo, progNo);
+          setPrevTypeNo(typeNo);
+          setPrevProgNo(progNo);
+          setPrevProgName(progName);
+        } else {
+          loaded = await loadPolygonsFromDB(typeNo, progNo);
+        }
+        setPolygons(loaded);
+        // setMlPolygons(loaded.map(p => ({ ...p, okNok: false })));
+      }
+    };
+    init();
+  }, [typeNo, progNo, progName]);
+
+
+  const getFormattedDateTime = () => {
+    const now = new Date();
+
+    const pad = (n, z = 2) => String(n).padStart(z, '0');
+
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_` +
+          `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}-${pad(now.getMilliseconds(), 3)}`;
+  };
+
+  const getFormattedTime = () => {
+    const now = new Date();
+
+    const pad = (n, z = 2) => String(n).padStart(z, '0');
+
+    return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  };
+
+  const addPolygon = () => {
+    setPolygons((prevPolygons) => {
+      const baseX = 200 + prevPolygons.length * 20;
+      const baseY = 200 + prevPolygons.length * 20;
+
+      const newPolygon = {
+        id: prevPolygons.length + 1,
+        points: [
+          { x: baseX, y: baseY },
+          { x: baseX + 50, y: baseY },
+          { x: baseX + 25, y: baseY - 50 },
+        ],
+      };
+
+      return [...prevPolygons, newPolygon];
+    });
+  };
+
+  const handlePolygonUpdate = (id, newPoints) => {
+    setPolygons((prevPolygons) => {
+      return prevPolygons.map((polygon) =>
+        polygon.id === id ? { ...polygon, points: newPoints } : polygon
+      );
+    });
+  };
+  
+
+  // Ray-casting algoritması ile noktanın poligon içinde olup olmadığını kontrol eden fonksiyon
+  const isPointInPolygon = (point, polygon) => {
+    const { x, y } = point;
+    let inside = false;
+    const points = polygon.points; // polygon nesnesinden points alıyoruz
+
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+      const xi = points[i].x, yi = points[i].y;
+      const xj = points[j].x, yj = points[j].y;
+
+      const intersect = ((yi > y) !== (yj > y)) &&
+                        (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+
+    return inside;
+  };
+
+  // Click event handler
+  const handleClick = (e) => {
+    const container = document.getElementById("camera-container");
+    const rect = container.getBoundingClientRect();
+
+    const clickPoint = {
+      x: (e.clientX - rect.left - 16 - cameraOffset.x) / scale,
+      y: (e.clientY - rect.top - 16 - cameraOffset.y) / scale,
+    };
+    
+    // Burada sadece polygon nesnesini gönderiyoruz
+    const foundPolygon = polygons.find(polygon =>
+      isPointInPolygon(clickPoint, polygon)
+    );
+
+    if (foundPolygon) {
+      setFocusedId(foundPolygon.id);
+    } else {
+      setFocusedId(null);
+    }
+  };
+
+  const deleteFocusedPolygon = async () => {
+    if (focusedId !== null) {
+      try {
+        // Poligonu frontend'de filtrele ve id'leri yeniden sırala
+        const updatedPolygons = polygons
+          .filter(p => p.id !== focusedId)
+          .map((p, index) => ({ ...p, id: index + 1 }));
+
+        setPolygons(updatedPolygons);
+        setFocusedId(null);
+
+        // Backend'e sadece tüm güncel polygons listesini gönder
+        await savePolygonsToDB(updatedPolygons);
+
+      } catch (err) {
+        console.error("Polygon silinirken hata oluştu:", err);
+        alert("Polygon silinemedi.");
+      }
+    }
+  };
+
+  const savePolygonsToDB = async () => {
+    try {
+      const payload = {
+        typeNo,
+        progNo,
+        polygons
+      };
+
+      const response = await fetch('http://localhost:5050/update-polygons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) throw new Error('DB update failed');
+
+      alert("Polygons updated in database!");
+      /*
+      setMlPolygons(prev =>
+        polygons.map(newP => {
+          const old = prev.find(p => p.id === newP.id);
+          return {
+            ...newP,
+            okNok: old ? old.okNok : false, // varsa koru, yoksa false ata
+          };
+        })
+      );
+      */
+      // console.log("ML POLY: ", mlPolygons)
+
+    } catch (error) {
+      console.error("Error updating polygons in DB:", error);
+      //alert("Failed to update database.");
+    }
+  };
+  
+  const RGBICalculate = async () => {
+    const imageElement = document.getElementById("camera-frame");
+    const datetime = getFormattedDateTime();
+    if (!imageElement) {
+      alert("Kamera görüntüsü yok");
+      return;
+    }
+
+    setMeasurementType("RGBI");
+
+    const canvas = document.createElement('canvas');
+    canvas.width = imageElement.width;
+    canvas.height = imageElement.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+    const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+    const results = await sendPolygonsToCalculateRgbi({
+      typeNo,
+      progNo,
+      setRgbiResults, 
+      imageDataUrl,
+      datetime,
+    });
+    console.log("SÖYLE",results)
+
+    const updatedPolygons = updatePolygonsWithStatus(polygons, results);
+    setPolygons(updatedPolygons)
+
+    SaveFrameWithPolygons(typeNo, progNo, updatedPolygons, "rgbi", imageDataUrl, datetime);
+  };
+
+
+  const MLPreProc = async () => {
+    try {
+      const imageElement = document.getElementById("camera-frame");
+      if (!imageElement) {
+        alert("Kamera görüntüsü yok");
+        return;
+      }
+
+      const datetime = getFormattedDateTime();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = imageElement.width;
+      canvas.height = imageElement.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+      const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+      const preProcResponse = await fetch("http://localhost:5050/pre_proc_ml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mlPolygons,
+          image: imageDataUrl
+        })
+      });
+
+      if (!preProcResponse.ok) {
+        throw new Error(`Pre-processing failed: ${preProcResponse.statusText}`);
+      }
+
+      const results = await preProcResponse.json();
+      console.log("ML Results:", results);
+
+      const saveResponse = await fetch("http://localhost:5050/save_ml_pre_proc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          dateTime: datetime,
+          results
+        })
+      });
+
+      if (!saveResponse.ok) {
+        throw new Error(`Save ML pre-process failed: ${saveResponse.statusText}`);
+      }
+
+      console.log("ML Processing OK ✅");
+
+    } catch (err) {
+      console.error("MLPreProc error:", err);
+    }
+  };
+
+
+  const MLTest = async () => {
+    try {
+      const imageElement = document.getElementById("camera-frame");
+      if (!imageElement) {
+        alert("Kamera görüntüsü yok");
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = imageElement.width || imageElement.videoWidth;
+      canvas.height = imageElement.height || imageElement.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+      const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+      // Pre-processing
+      const preProcResponse = await fetch("http://localhost:5050/pre_proc_ml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mlPolygons,
+          image: imageDataUrl
+        })
+      });
+      const preProcData = await preProcResponse.json();
+
+      // Her tool için sadece kendi feature'ları ile tahmin
+      const toolIds = [1, 2, 3, 4];  // Mevcut tool ID’ler
+      const results = {};
+
+      for (let toolId of toolIds) {
+        // Sadece bu toolId’ye ait polygonların feature’ları
+        console.log("hoha", preProcData)
+        const toolFeatures = preProcData
+          .filter(p => p.id === toolId)
+          .map(p => p.features);
+
+        if (toolFeatures.length === 0) continue; // polygon yoksa atla
+        console.log(toolFeatures)
+
+        const predictResponse = await fetch("http://localhost:5050/predict_ml", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            typeNo,
+            progNo,
+            toolId,
+            features: toolFeatures
+          })
+        });
+
+        const predictData = await predictResponse.json();
+        results[toolId] = predictData.predictions;
+      }
+
+      console.log("Tool bazlı tahminler:", results);
+      alert("Tahminler alındı, console.log'dan görebilirsiniz.");
+
+    } catch (err) {
+      console.error("Hata:", err);
+      alert("Tahmin sırasında hata oluştu: " + err.message);
+    }
+  };
+
+  const updatePolygonsWithStatus = (polygons, rgbiResults) => {
+    return polygons.map(polygon => {
+      const matchedResult = rgbiResults.find(r => Number(r.id) === Number(polygon.id));
+      return matchedResult
+        ? { ...polygon, status: matchedResult.status }
+        : { ...polygon, status: "empty" }; 
+    });
+  };
+
+  const resetPolygonPosition = (polygonId) => {
+    setPolygons((prevPolygons) =>
+      prevPolygons.map((polygon) => {
+        if (polygon.id !== polygonId) return polygon;
+
+        const points = polygon.points;
+        if (points.length === 0) return polygon;
+
+        // İlk noktayı baz alarak kaydırma miktarı hesapla
+        const dx = points[0].x;
+        const dy = points[0].y;
+
+        // Bütün noktaları orijine (örneğin x=10, y=10) taşı
+        const targetX = 100;
+        const targetY = 100;
+
+        const offsetX = targetX - dx;
+        const offsetY = targetY - dy;
+
+        const movedPoints = points.map((p) => ({
+          x: p.x + offsetX,
+          y: p.y + offsetY,
+        }));
+
+        return {
+          ...polygon,
+          points: movedPoints,
+        };
+      })
+    );
+  };
+
+  const RGBITeach = async () => {
+    const imageElement = document.getElementById("camera-frame");
+    TeachTheMeasurement(typeNo, progNo, imageElement, setTolerance, polygons);
+  }
+
+  const fetchPolygonsFromDB = async (typeNo, progNo) => {
+    const res = await fetch(`http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`);
+    if (!res.ok) throw new Error("Poligonlar çekilemedi.");
+    return await res.json();
+  };
+
+  /*
+  const sendPolygonsToCalculateHistogram = async ({ typeNo, progNo, polygons, imageElement, datetimeStr }) => {
+    try {
+      if (!typeNo || !progNo || !imageElement) {
+        alert("Eksik bilgi!");
+        return;
+      }
+
+      // Teach histogramları al
+      const teachHistogramsResp = await fetch(`http://localhost:5050/get_histograms?typeNo=${typeNo}&progNo=${progNo}`);
+      const teachHistograms = await teachHistogramsResp.json(); // [{toolId, histogram:{r,g,b}}]
+
+      if (!teachHistograms || teachHistograms.length === 0) {
+        alert("Teach histogram verisi alınamadı.");
+        return;
+      }
+
+      // Görüntüyü al
+      const canvas = document.createElement("canvas");
+      canvas.width = imageElement.width;
+      canvas.height = imageElement.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+      const imageDataUrl = canvas.toDataURL("image/jpeg");
+
+      // Öncelikle fotoğrafı kaydet
+      const saveResponse = await fetch("http://localhost:5050/save_frame", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          measureType: "hist",
+          datetimeStr,   // burada gönderiyoruz
+          image: imageDataUrl,
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        alert("Fotoğraf kaydetme başarısız.");
+        return;
+      }
+
+      const saveData = await saveResponse.json();
+      console.log("Fotoğraf kaydedildi:", saveData.filename);
+
+      // Measure API'ye gönder
+      const response = await fetch("http://localhost:5050/measure_histogram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          polygons,
+          image: imageDataUrl,
+          teachHistograms,
+        }),
+      });
+
+      if (!response.ok) {
+        alert("Ölçüm yapılamadı.");
+        return;
+      }
+
+      const result = await response.json();
+      console.log("Measure Histogram Results:", result);
+      return result;
+
+    } catch (err) {
+      console.error("Measurement failed:", err);
+      alert("Histogram ölçüm hatası.");
+    }
+  };
+  */
+
+  const TeachTheMeasurement = async (typeNo, progNo, imageElement, setTolerance, polygons) => {
+    try {
+      if (!imageElement) {
+        alert("Kamera görüntüsü bulunamadı.");
+        return;
+      }
+
+      let allResults = [];
+
+      for (let i = 0; i < 10; i++) {
+        const result = await captureSingleMeasurement(imageElement, polygons);
+        allResults.push(result);
+        await new Promise(res => setTimeout(res, 200));
+      }
+console.log("LAAAANANANANANANANA", polygons)
+      const averagedResults = allResults[0].map((_, idx) => {
+        const id = allResults[0][idx].id;
+        let sum_r = 0, sum_g = 0, sum_b = 0, sum_i = 0;
+        allResults.forEach(resultSet => {
+          sum_r += resultSet[idx].avg_r;
+          sum_g += resultSet[idx].avg_g;
+          sum_b += resultSet[idx].avg_b;
+          sum_i += resultSet[idx].intensity;
+        });
+        return {
+          id,
+          avg_r: sum_r / allResults.length,
+          avg_g: sum_g / allResults.length,
+          avg_b: sum_b / allResults.length,
+          intensity: sum_i / allResults.length,
+        };
+      });
+      console.log("LAAAANANANANANANANA", polygons)
+
+      const toleranceLimits = averagedResults.map(r => {
+        const poly = polygons.find(p => p.id === r.id);
+        const tol_r = poly?.r ?? 0;
+        const tol_g = poly?.g ?? 0;
+        const tol_b = poly?.b ?? 0;
+        const tol_i = poly?.i ?? 0;
+
+        return {
+          id: r.id,
+          min_r: Math.max(0, r.avg_r - tol_r),
+          max_r: Math.min(255, r.avg_r + tol_r),
+          min_g: Math.max(0, r.avg_g - tol_g),
+          max_g: Math.min(255, r.avg_g + tol_g),
+          min_b: Math.max(0, r.avg_b - tol_b),
+          max_b: Math.min(255, r.avg_b + tol_b),
+          min_i: Math.max(0, r.intensity - tol_i),
+          max_i: Math.min(255, r.intensity + tol_i),
+          tole_r: tol_r,
+          tole_g: tol_g,
+          tole_b: tol_b,
+          tole_i: tol_i,
+        };
+      });
+      
+
+      setTolerance(toleranceLimits);
+
+      // 🔁 DB'ye kaydet
+      const saveResponse = await fetch("http://localhost:5050/save_rgbi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          measurements: toleranceLimits,
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        const errText = await saveResponse.text();
+        console.error("❌ RGBI kayıt hatası:", errText);
+        alert("RGBI kayıt hatası!");
+      } else {
+        alert("Teaching ve RGBI kayıt işlemi tamamlandı!");
+      }
+
+    } catch (err) {
+      console.error("Teach failed:", err);
+      alert("Teaching failed.");
+    }
+  };
+
+
+  const TeachTheHist = async (typeNo, progNo, imageElement, setHistTolerance, polygons) => {
+    try {
+      if (!imageElement) {
+        alert("Kamera görüntüsü bulunamadı.");
+        return;
+      }
+
+      // Polygon başına averagedResults oluştur (RGBI gibi değil sadece tolerance için)
+      const toleranceLimits = polygons.map(poly => ({
+        id: poly.id,
+        hist_tol: poly?.hist_tolerance ?? 0.1, // default 0.1
+      }));
+
+      setHistTolerance(toleranceLimits.reduce((acc, cur) => {
+        acc[cur.id] = cur.hist_tol;
+        return acc;
+      }, {}));
+
+      // 🔁 DB'ye kaydet
+      const saveResponse = await fetch("http://localhost:5050/save_hist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+          measurements: toleranceLimits,
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        const errText = await saveResponse.text();
+        console.error("❌ HIST kayıt hatası:", errText);
+        alert("HIST kayıt hatası!");
+      } else {
+        alert("Teaching ve histogram toleransları başarıyla kaydedildi!");
+      }
+
+    } catch (err) {
+      console.error("Teach failed:", err);
+      alert("Teaching failed.");
+    }
+  };
+
+
+  /*
+  const HistCalculate = async () => {
+    try {
+      // datetime'ı oluştur
+      const now = new Date();
+      const datetimeStr = now.toISOString().replace(/:/g, "-").replace(/\..+/, ""); 
+
+      const imageElement = document.getElementById("camera-frame");
+      if (!imageElement) {
+        alert("Kamera görüntüsü bulunamadı.");
+        return;
+      }
+      setMeasurementType("HIST");
+
+      const polygons = await fetchPolygonsFromDB(typeNo, progNo);
+
+      const result = await sendPolygonsToMeasureHistogram({
+        typeNo,
+        progNo,
+        polygons,
+        imageElement,
+        datetimeStr,    // buraya ekle
+      });
+
+      if (!result) {
+        alert("Histogram sonucu alınamadı.");
+        return;
+      }
+
+      setHistogramResults(result);
+
+      // Hepsi OK mi?
+      const isAllOK = result.every(r => r.status === "OK");
+
+      // Backend'e sonucu kaydet
+      await fetch("http://localhost:5050/save_results", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          TypeNo: typeNo,
+          ProgNo: progNo,
+          MeasType: "HIST",
+          Barcode: 123456,
+          ToolCount: polygons.length,
+          Result: isAllOK ? "OK" : "NOK",
+          DateTime: datetimeStr,  // buraya ekle
+        }),
+      });
+
+      alert("Histogram sonucu kaydedildi.");
+    } catch (error) {
+      console.error("HistMeasure hatası:", error);
+      alert("Histogram ölçüm hatası.");
+    }
+  };
+  */
+
+  const HistCalculate = async () => {
+    const imageElement = document.getElementById("camera-frame");
+    const datetime = getFormattedDateTime();
+    if (!imageElement) {
+      alert("Kamera görüntüsü yok");
+      return;
+    }
+
+    setMeasurementType("HIST");
+
+    const canvas = document.createElement('canvas');
+    canvas.width = imageElement.width;
+    canvas.height = imageElement.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+    const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+    const results = await sendPolygonsToCalculateHistogram({
+      typeNo,
+      progNo,
+      setHistogramResults,
+      imageDataUrl,
+      datetime,
+    });
+    console.log("Histogram Results: ", results)
+
+    const updatedPolygons = updatePolygonsWithStatus(polygons, results);
+    setPolygons(updatedPolygons)
+
+    SaveFrameWithPolygons(typeNo, progNo, updatedPolygons, "histogram", imageDataUrl, datetime);
+  }
+
+
+  const sendPolygonsToTeachHistogram = async ({ typeNo, progNo, polygons, image }) => {
+    try {
+      if (!typeNo || !progNo || !image) {
+        alert("Eksik bilgi!");
+        return;
+      }
+
+      const response = await fetch("http://localhost:5050/teach_histogram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ typeNo, progNo, polygons, image }),
+      });
+
+      if (!response.ok) {
+        alert("Teach işlemi başarısız oldu.");
+        return;
+      }
+
+      const result = await response.json();
+      console.log("Teach Histogram Sonucu:", result);
+
+      // Gelen tüm histogramları save_histogram'a yolla
+      for (const item of result.histograms) {
+        const poly = polygons.find(p => p.id === item.toolId);
+        //const histTolerance = poly?.hist_tolerance ?? 0.1; // Polygon’dan al, yoksa default
+
+        const saveResponse = await fetch("http://localhost:5050/save_histogram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            typeNo,
+            progNo,
+            toolId: item.toolId,
+            histogram: item.histogram,
+            //histTolerance, // ✅ burayı ekledik
+          }),
+        });
+
+        if (!saveResponse.ok) {
+          console.error("❌ Histogram kaydedilemedi:", await saveResponse.text());
+        }
+      }
+
+      alert("Teach ve kayıt işlemleri başarıyla tamamlandı!");
+
+    } catch (error) {
+      console.error("Teach histogram failed:", error);
+      alert("Teach histogram failed.");
+    }
+  };
+
+
+
+  const HistTeach = async () => {
+    const imageElement = document.getElementById("camera-frame");
+    if (!imageElement) {
+      alert("Kamera görüntüsü yok");
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = imageElement.width;
+    canvas.height = imageElement.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+    const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+
+    const polygonsWithTolerance = polygons.map(p => ({
+      ...p,
+      hist_tolerance: p.hist_tolerance ?? 0.1, // default 0.1
+    }));
+
+
+    await sendPolygonsToTeachHistogram({
+      typeNo,
+      progNo,
+      polygons: polygonsWithTolerance,
+      image: imageDataUrl,
+    });
+
+    await TeachTheHist(typeNo, progNo, imageElement, setHistTolerance, polygonsWithTolerance);
+  };
+
+
+  const MLTeach = async () => {
+    try {
+      const response = await fetch("http://localhost:5050/teach_ml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeNo,
+          progNo,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log("✅ ML modeller başarıyla eğitildi:", data.results);
+        alert("✅ ML modeller başarıyla eğitildi!");
+      } else {
+        console.error("❌ ML eğitiminde hata:", data.error);
+        alert("❌ ML eğitiminde hata: " + data.error);
+      }
+    } catch (err) {
+      console.error("❌ Sunucuya bağlanırken hata oluştu:", err);
+      alert("❌ Sunucuya bağlanırken hata oluştu: " + err.message);
+    }
+  };
+
+  const measureFuncs = {
+    rgb: RGBICalculate,// MLTest, //MLPreProc,
+    hist: HistCalculate, //MLPreProc, //HistCalculate
+  };
+
+  const teachFuncs = {
+    rgb: RGBITeach, //MLTeach
+    hist: HistTeach,
+  };
+
+  const renderMeasurementTable = () => {
+    switch (measurementType) {
+      case "RGBI":
+        return (
+          <MeasurementResultTable
+            title="RGBI RESULTS"
+            columns={["ID", "R", "G", "B", "I", "Status"]}
+            data={rgbiResults.map(r => ({
+              id: r.id,
+              r: r.avg_r,
+              g: r.avg_g,
+              b: r.avg_b,
+              i: r.intensity,
+              status: r.status,
+            }))}
+            refreshKey={tableRefreshKey}
+            timeLog={getFormattedTime()}
+          />
+        );
+      case "HIST":
+        return (
+          <MeasurementResultTable
+            title="HISTOGRAM RESULTS"
+            columns={["ID", "Diff R", "Diff G", "Diff B", "Status"]}
+            data={histogramResults.map(r => ({
+              id: r.id,
+              "diff r": r.diff_r,
+              "diff g": r.diff_g,
+              "diff b": r.diff_b,
+              status: r.status,
+            }))}
+            refreshKey={tableRefreshKey}
+            timeLog={getFormattedTime()}
+          />
+        );
+      default:
+        return (
+          <MeasurementResultTable
+            title="MEASUREMENT RESULTS"
+            columns={["-", "-", "-", "-", "-", "-"]}
+            data={[]}
+          />
+        );
+    }
+  };
+
+
+  return (
+      <section className="min-h-screen pt-20 px-6 pb-8 bg-white text-white">
+        <div className="flex space-x-4 space-y-4">
+          <div
+          ref={cameraContainerRef}
+          id="camera-container"
+          className="relative w-full h-[65vh] bg-gray-200 rounded-xl p-4 shadow-xl text-black"
+          onClick={handleClick}
+        >
+          <Camera
+            typeNo={typeNo}
+            progNo={progNo}
+            polygons={polygons}
+            focusedId={focusedId}
+            onPolygonUpdate={handlePolygonUpdate}
+            cropMode={cropMode}
+            offset={cameraOffset}      
+            setOffset={setCameraOffset} 
+            scale={scale}
+            setScale={setScale}
+          />
+
+        </div>
+        <ControlPanel
+          typeNo={typeNo}
+          progNo={progNo}
+          progName={progName}
+          allTypes={allTypes}
+          onAdd={addPolygon}
+          onDelete={deleteFocusedPolygon}
+          onSave={savePolygonsToDB}
+          onCalculate={measureFuncs}
+          onTeach={teachFuncs}
+          refreshTypes={refreshTypes}
+          setMeasurementType={setMeasurementType}
+          onCropModeToggle={() => setCropMode(prev => !prev)} // burada toggle'ı gönderiyorsun
+          onTypeProgramChange={async (newTypeNo, newProgNo, newProgName) => {
+          // State güncelle
+          setTypeNo(newTypeNo);
+          setProgNo(newProgNo);
+          setProgName(newProgName);
+
+
+          await refreshTypes();
+          
+
+          // Kamera resetle
+          await stopCamera();
+          await startCamera();
+          console.log("Type/Prog değişti:", newTypeNo, newProgNo, newProgName);
+        }}
+        />
+      </div>
+      <div className="flex flex-row space-x-4">
+
+        <div className="w-full h-[30vh] bg-gray-200 rounded-xl shadow-xl text-black relative flex flex-col">
+          <ToolParameters
+            polygons={polygons}
+            setPolygons={setPolygons}
+            // mlPolygons={mlPolygons}
+            // setMlPolygons={setMlPolygons}
+            focusedId={focusedId}
+            setFocusedId={setFocusedId}
+            resetPolygonPosition={resetPolygonPosition}
+            measurementType={measurementType}
+          />
+        </div>
+
+        {renderMeasurementTable()}
+
+      </div>
+
+    </section>
+  );
+};

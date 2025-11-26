@@ -1,0 +1,45 @@
+# Node modules
+colyze/node_modules/
+
+# Build output
+build/
+dist/
+dist_electron/
+
+# React environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.sqlite
+
+# Python virtualenv
+venv/
+flask-server/colyze-flask-env-linux/
+
+# __pycache__ ve diğer Python artıkları
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code
+.vscode/
+
+# MacOS
+.DS_Store
+
+
+flask-server/temp_frames
+flask-server/temp_texts
+flask-server/ml
+flask-server/build
+
+flask-server/routes/trials/
+
+flask-server/db/alembic/
+flask-server/db/alembic.ini
+
+react-client/flask-server
+react-client/node_modules

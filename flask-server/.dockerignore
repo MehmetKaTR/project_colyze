@@ -1,0 +1,6 @@
+__pycache__
+*.pyc
+build
+dist
+temp_frames
+temp_texts
