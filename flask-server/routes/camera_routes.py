@@ -93,13 +93,31 @@ camera = None
 
 def start_camera():
     global camera
+
+    config_file = f"{BASE_DIR}/routes/devicef1.xml"
+
+    # Eğer xml yoksa -> kullanıcıdan kamera seçmesini iste
+    if not os.path.exists(config_file):
+        print("devicef1.xml bulunamadı -> kamera seçimi açılıyor...")
+        hGrabber = ic.IC_ShowDeviceSelectionDialog(None)
+
+        if ic.IC_IsDevValid(hGrabber):
+            ic.IC_SaveDeviceStateToFile(hGrabber, tis.T(config_file))
+            ic.IC_ReleaseGrabber(hGrabber)
+        else:
+            print("Kullanıcı kamera seçmedi!")
+            return False
+
+    # Buraya kadar xml garanti üretilmiş oldu
     if camera is None:
-        camera = ic.IC_LoadDeviceStateFromFile(None, tis.T(f"{BASE_DIR}/routes/devicef1.xml"))
+        camera = ic.IC_LoadDeviceStateFromFile(None, tis.T(config_file))
         if not ic.IC_IsDevValid(camera):
             camera = None
             return False
         ic.IC_StartLive(camera, 1)
+
     return True
+
 
 def stop_camera():
     global camera
