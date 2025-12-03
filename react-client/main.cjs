@@ -8,11 +8,9 @@ let win;
 let pythonProcess;
 
 const PYTHON_PORT = 5050;
-
-// ✅ Geliştirme mi, paketli mi kontrol et
 const isDev = !app.isPackaged;
 
-// 🔹 Backend hazır mı kontrol
+// 🔹 Backend sağ mı kontrol
 function checkBackendReady() {
   return new Promise((resolve) => {
     const interval = setInterval(() => {
@@ -26,6 +24,7 @@ function checkBackendReady() {
   });
 }
 
+// 🔹 Temp klasörlerini temizle
 function clearTempFolders() {
   const baseDir = isDev
     ? path.join(__dirname, 'flask-server')
@@ -49,37 +48,18 @@ function clearTempFolders() {
   console.log('Temp folders cleared from Electron');
 }
 
-// 🔹 Python backend başlat
+// 🔹 Python başlat
 function startPython() {
-  // ✅ Build durumuna göre doğru path
   const pythonExePath = isDev
-    ? path.join(__dirname, 'flask-server', 'app.exe') // geliştirme ortamında
-    : path.join(process.resourcesPath,  'flask-server', 'app.exe'); // paketlenmiş uygulamada
+    ? path.join(__dirname, 'flask-server', 'app.exe')
+    : path.join(process.resourcesPath, 'flask-server', 'app.exe');
 
   console.log('Python EXE path:', pythonExePath);
 
-  // 🔹 EXE’yi başlat
   pythonProcess = spawn(pythonExePath, [], { stdio: 'inherit' });
 
   pythonProcess.on('close', (code) => console.log(`Python EXE kapandı. Kod: ${code}`));
 }
-/*
-function clearTempFolders() {
-  const baseDir = path.join(process.resourcesPath, 'flask-server'); // burada Python EXE ile aynı klasör
-  const tempDirs = ['temp_frames', 'temp_texts'];
-  tempDirs.forEach(dir => {
-    const fullPath = path.join(baseDir, dir);
-    console.log('Temps path:', fullPath);
-    if (fs.existsSync(fullPath)) {
-      fs.readdirSync(fullPath).forEach(file => {
-        const fp = path.join(fullPath, file);
-        fs.rmSync(fp, { recursive: true, force: true });
-      });
-    }
-  });
-  console.log('Temp folders cleared from Electron');
-}
-*/
 
 // 🔹 Python durdur
 function stopPython() {
@@ -118,9 +98,37 @@ async function createWindow() {
     : path.join(__dirname, 'build', 'index.html');
 
   win.loadFile(indexPath);
-  win.webContents.openDevTools({ mode: 'detach' }); // React tarafı loglar için
 
-  // 🔹 Pencere kapatma güvenli
+  // ❌ Otomatik açma kapatıldı — gizli olacak
+  // win.webContents.openDevTools({ mode: 'detach' });
+
+  // 🔐 DEVTOOLS GİZLİ TETİKLEME MEKANİZMASI (F10 x 3)
+  let f10Count = 0;
+  let f10Timer = null;
+
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type === "keyDown" && input.key === "F10") {
+
+      f10Count++;
+
+      // Timer reset
+      if (f10Timer) clearTimeout(f10Timer);
+      f10Timer = setTimeout(() => {
+        f10Count = 0;
+      }, 700);
+
+      if (f10Count === 3) {
+        if (win.webContents.isDevToolsOpened()) {
+          win.webContents.closeDevTools();
+        } else {
+          win.webContents.openDevTools({ mode: "detach" });
+        }
+        f10Count = 0;
+      }
+    }
+  });
+
+  // 🔐 güvenli kapanış
   win.on('close', () => {
     if (pythonProcess) {
       stopPython();
@@ -139,7 +147,7 @@ ipcMain.on('window-maximize', () => {
 });
 ipcMain.on('window-close', () => win && win.close());
 
-// 🔹 Electron app lifecycle
+// 🔹 Electron lifecycle
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
