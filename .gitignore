@@ -43,3 +43,4 @@ flask-server/db/alembic.ini
 
 react-client/flask-server
 react-client/node_modules
+react-client/scripts
