@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
 import { Rnd } from "react-rnd";
 
-const CropRect = ({ typeNo, progNo, cropRect, setCropRect, imageSrc, scale }) => {
+const CropRect = ({ typeNo, progNo, cropRect, setCropRect, onRoiShift, scale }) => {
   const [ctrlPressed, setCtrlPressed] = useState(false);
 
-  // Klavyeden Ctrl tuşunu dinle
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Control") setCtrlPressed(true);
@@ -22,14 +21,8 @@ const CropRect = ({ typeNo, progNo, cropRect, setCropRect, imageSrc, scale }) =>
     };
   }, []);
 
-  // Crop butonuna tıklanınca backend'e gönder
   const handleCrop = async () => {
     if (!cropRect) return;
-
-    const rectX = cropRect.x / scale;
-    const rectY = cropRect.y / scale;
-    const rectW = cropRect.width / scale;
-    const rectH = cropRect.height / scale;
 
     try {
       const response = await fetch("http://localhost:5050/type-rect", {
@@ -38,38 +31,45 @@ const CropRect = ({ typeNo, progNo, cropRect, setCropRect, imageSrc, scale }) =>
         body: JSON.stringify({
           TypeNo: typeNo,
           ProgramNo: progNo,
-          RectX: rectX,
-          RectY: rectY,
-          RectW: rectW,
-          RectH: rectH,
+          RectX: cropRect.x,
+          RectY: cropRect.y,
+          RectW: cropRect.width,
+          RectH: cropRect.height,
         }),
       });
       const result = await response.json();
       console.log(result.message);
     } catch (error) {
-      console.error("Crop koordinatları kaydedilemedi:", error);
+      console.error("Crop koordinatlari kaydedilemedi:", error);
     }
   };
 
-  if (!cropRect) return null; // cropRect yoksa render etme
+  if (!cropRect) return null;
 
   return (
     <>
       <Rnd
-        size={{ width: cropRect.width, height: cropRect.height }}
-        position={{ x: cropRect.x, y: cropRect.y }}
-        minWidth={1400}
-        minHeight={600}
-        disableDragging={ctrlPressed} // ✅ Ctrl basılıyken drag kapalı
+        size={{ width: cropRect.width * scale, height: cropRect.height * scale }}
+        position={{ x: cropRect.x * scale, y: cropRect.y * scale }}
+        minWidth={1400 * scale}
+        minHeight={600 * scale}
+        disableDragging={ctrlPressed}
         onDragStop={(e, d) => {
-          setCropRect((prev) => ({ ...prev, x: d.x, y: d.y }));
+          const newX = d.x / scale;
+          const newY = d.y / scale;
+          const dx = newX - cropRect.x;
+          const dy = newY - cropRect.y;
+          setCropRect((prev) => ({ ...prev, x: newX, y: newY }));
+          if (onRoiShift && (dx !== 0 || dy !== 0)) {
+            onRoiShift(dx, dy);
+          }
         }}
         onResizeStop={(e, direction, ref, delta, position) => {
           setCropRect({
-            width: Number(ref.style.width.replace("px", "")),
-            height: Number(ref.style.height.replace("px", "")),
-            x: position.x,
-            y: position.y,
+            width: Number(ref.style.width.replace("px", "")) / scale,
+            height: Number(ref.style.height.replace("px", "")) / scale,
+            x: position.x / scale,
+            y: position.y / scale,
           });
         }}
         style={{
@@ -82,9 +82,9 @@ const CropRect = ({ typeNo, progNo, cropRect, setCropRect, imageSrc, scale }) =>
       <button
         onClick={handleCrop}
         className="absolute top-2 left-2 bg-white px-3 py-1 text-black border border-gray-300 rounded hover:bg-gray-100"
-        style={{ zIndex: 9999 }} // ✅ her şeyin üstünde
+        style={{ zIndex: 9999 }}
       >
-        Crop
+        Save ROI
       </button>
     </>
   );

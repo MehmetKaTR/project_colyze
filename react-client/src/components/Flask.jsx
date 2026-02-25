@@ -133,6 +133,21 @@ export const loadPolygonsFromDB = async (typeNo, progNo) => {
   }
 };
 
+const fetchJsonOrThrow = async (url, options = {}, errPrefix = "Request failed") => {
+  const response = await fetch(url, options);
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+  if (!response.ok) {
+    const message = data?.error || data?.message || `${errPrefix} (${response.status})`;
+    throw new Error(message);
+  }
+  return data;
+};
+
 
 const fetchRgbiTeachTolerance = async (typeNo, progNo) => {
   try {
@@ -183,15 +198,14 @@ export const sendPolygonsToCalculateRgbi = async ({
       return;
     }
 
-    // Backend'den poligonları al
-    const polyRes = await fetch(
-      `http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`
-    );
-    if (!polyRes.ok) {
-      alert("Poligonlar çekilemedi.");
-      return;
-    }
-    const polygons = await polyRes.json();
+    const [polygons, tolerance] = await Promise.all([
+      fetchJsonOrThrow(
+        `http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`,
+        {},
+        "Poligonlar çekilemedi"
+      ),
+      fetchRgbiTeachTolerance(typeNo, progNo),
+    ]);
 
     // Poligonlar ve görüntüyle RGBI hesaplat
     const response = await fetch("http://localhost:5050/calculate_rgbi", {
@@ -207,8 +221,6 @@ export const sendPolygonsToCalculateRgbi = async ({
 
     const results = await response.json();
 
-    // Teach tolerans verilerini çek
-    const tolerance = await fetchRgbiTeachTolerance(typeNo, progNo);
     if (!tolerance) {
       alert("Teach tolerans verisi alınamadı.");
       return;
@@ -321,26 +333,18 @@ export const sendPolygonsToCalculateHistogram = async ({
       return;
     }
 
-    // Poligonları çek
-    const polyRes = await fetch(
-      `http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`
-    );
-    if (!polyRes.ok) {
-      alert("Poligonlar çekilemedi.");
-      return;
-    }
-    const polygons = await polyRes.json();
-
-    // Teach histogram verisini çek
-    const teachRes = await fetch(
-      `http://localhost:5050/get_histogram_teach?typeNo=${typeNo}&progNo=${progNo}`
-    );
-    if (!teachRes.ok) {
-      alert("Teach histogram verisi çekilemedi.");
-      return;
-    }
-
-    const teachData = teachRes.ok ? await teachRes.json() : [];
+    const [polygons, teachData] = await Promise.all([
+      fetchJsonOrThrow(
+        `http://localhost:5050/tools_by_typeprog?typeNo=${typeNo}&progNo=${progNo}`,
+        {},
+        "Poligonlar çekilemedi"
+      ),
+      fetchJsonOrThrow(
+        `http://localhost:5050/get_histogram_teach?typeNo=${typeNo}&progNo=${progNo}`,
+        {},
+        "Teach histogram verisi çekilemedi"
+      ),
+    ]);
 
     console.log("olcum oncesi", teachData)
 

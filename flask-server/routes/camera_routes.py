@@ -16,15 +16,26 @@ from pathlib import Path
 import os
 from datetime import datetime
 import sys
+import shutil
+import xml.etree.ElementTree as ET
+from path_config import (
+    APP_BASE_DIR,
+    CAMERA_PROFILES_DIR,
+    CAMERA_PROFILES_FILE,
+    DEVICE_XML_PATH,
+    DEVICE_XML_TEMPLATE,
+    ML_ROOT_DIR,
+    TEMP_FRAMES_DIR,
+    TEMP_TEXTS_DIR,
+    TISGRABBER_DLL_PATH,
+    ensure_runtime_layout,
+)
 
 camera_bp = Blueprint('camera', __name__)
 # camera = None
 
-if getattr(sys, 'frozen', False):
-    BASE_DIR = Path(sys.executable).parent
-else:
-    BASE_DIR = Path(__file__).resolve().parent.parent
-print(BASE_DIR)
+ensure_runtime_layout()
+BASE_DIR = APP_BASE_DIR
 
 # def start_camera():
 #     global camera
@@ -84,31 +95,278 @@ def encode_frame_to_jpeg(frame):
 
 # -------------------- IC Image Source Camera Setup --------------------
 
-dll_path = os.path.join(BASE_DIR, "routes/tisgrabber_x64.dll")
+dll_path = str(TISGRABBER_DLL_PATH)
 ic = ctypes.cdll.LoadLibrary(dll_path)
 tis.declareFunctions(ic)
 ic.IC_InitLibrary(0)
 
 camera = None
+active_profile_id = None
 
-def start_camera():
-    global camera
+DEFAULT_PROFILE_ID = "default_profile"
+DEFAULT_PROFILE_NAME = "Default Camera Profile"
 
-    config_file = f"{BASE_DIR}/routes/devicef1.xml"
 
-    # Eğer xml yoksa -> kullanıcıdan kamera seçmesini iste
+def _ensure_profile_storage():
+    CAMERA_PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+    if not CAMERA_PROFILES_FILE.exists():
+        CAMERA_PROFILES_FILE.write_text(
+            json.dumps({"profiles": [], "active_profile_id": None}, indent=2),
+            encoding="utf-8",
+        )
+
+
+def _ensure_default_profile(data):
+    profiles = data.get("profiles")
+    if not isinstance(profiles, list):
+        profiles = []
+        data["profiles"] = profiles
+
+    default_exists = any(item.get("id") == DEFAULT_PROFILE_ID for item in profiles)
+    if not default_exists:
+        profiles.insert(
+            0,
+            {
+                "id": DEFAULT_PROFILE_ID,
+                "name": DEFAULT_PROFILE_NAME,
+                "xml_path": str(_fallback_xml_path()),
+                "created_at": datetime.now().isoformat(),
+                "settings": {},
+                "is_system": True,
+                "locked": True,
+                "camera_identity": _extract_camera_identity_from_xml(_fallback_xml_path()),
+            },
+        )
+
+    if not data.get("active_profile_id"):
+        data["active_profile_id"] = DEFAULT_PROFILE_ID
+
+    return data
+
+
+def _load_profiles_store():
+    _ensure_profile_storage()
+    try:
+        raw = CAMERA_PROFILES_FILE.read_text(encoding="utf-8")
+        data = json.loads(raw)
+        if "profiles" not in data:
+            data["profiles"] = []
+        if "active_profile_id" not in data:
+            data["active_profile_id"] = None
+        data = _ensure_default_profile(data)
+        _hydrate_profiles_camera_identity(data)
+        return data
+    except Exception:
+        data = _ensure_default_profile({"profiles": [], "active_profile_id": None})
+        _hydrate_profiles_camera_identity(data)
+        return data
+
+
+def _save_profiles_store(data):
+    _ensure_profile_storage()
+    normalized = _ensure_default_profile(data)
+    _hydrate_profiles_camera_identity(normalized)
+    CAMERA_PROFILES_FILE.write_text(json.dumps(normalized, indent=2), encoding="utf-8")
+
+
+def _extract_camera_identity_from_xml(xml_path):
+    identity = {
+        "device_name": "Unknown Device",
+        "device_base_name": "",
+        "device_unique_name": "",
+        "videoformat": "",
+        "fps": "",
+    }
+    try:
+        xml_file = Path(xml_path)
+        if not xml_file.exists():
+            return identity
+        tree = ET.parse(str(xml_file))
+        root = tree.getroot()
+        device = root.find("device")
+        if device is None:
+            return identity
+
+        identity["device_name"] = (device.attrib.get("name") or "").strip() or "Unknown Device"
+        identity["device_base_name"] = (device.attrib.get("base_name") or "").strip()
+        identity["device_unique_name"] = (device.attrib.get("unique_name") or "").strip()
+
+        videoformat = device.findtext("videoformat")
+        fps = device.findtext("fps")
+        identity["videoformat"] = (videoformat or "").strip()
+        identity["fps"] = (fps or "").strip()
+    except Exception:
+        return identity
+    return identity
+
+
+def _hydrate_profiles_camera_identity(data):
+    changed = False
+    profiles = data.get("profiles", [])
+    for item in profiles:
+        xml_path = item.get("xml_path")
+        if not xml_path:
+            continue
+        current = item.get("camera_identity") or {}
+        if current.get("device_name") and current.get("device_unique_name"):
+            continue
+        item["camera_identity"] = _extract_camera_identity_from_xml(xml_path)
+        changed = True
+    return changed
+
+
+def _resolve_profile(profile_id):
+    if not profile_id:
+        return None
+    data = _load_profiles_store()
+    for item in data.get("profiles", []):
+        if item.get("id") == profile_id:
+            return item
+    return None
+
+
+def _safe_get_exposure_settings(hGrabber):
+    result = {
+        "exposure_auto": None,
+        "exposure": None,
+        "exposure_range": None,
+    }
+    try:
+        exposureauto = ctypes.c_long()
+        ic.IC_SetPropertySwitch(hGrabber, tis.T("Exposure"), tis.T("Auto"), exposureauto)
+        result["exposure_auto"] = int(exposureauto.value)
+    except Exception:
+        pass
+    try:
+        exposure = ctypes.c_float()
+        expmin = ctypes.c_float()
+        expmax = ctypes.c_float()
+        ic.IC_GetPropertyAbsoluteValue(hGrabber, tis.T("Exposure"), tis.T("Value"), exposure)
+        ic.IC_GetPropertyAbsoluteValueRange(hGrabber, tis.T("Exposure"), tis.T("Value"), expmin, expmax)
+        result["exposure"] = float(exposure.value)
+        result["exposure_range"] = [float(expmin.value), float(expmax.value)]
+    except Exception:
+        pass
+    return result
+
+
+def _safe_get_gain_settings(hGrabber):
+    result = {
+        "gain": None,
+        "gain_range": None,
+    }
+    try:
+        gain = ctypes.c_long()
+        gainmin = ctypes.c_long()
+        gainmax = ctypes.c_long()
+        ic.IC_GetPropertyValue(hGrabber, tis.T("Gain"), tis.T("Value"), gain)
+        ic.IC_GetPropertyValueRange(hGrabber, tis.T("Gain"), tis.T("Value"), gainmin, gainmax)
+        result["gain"] = int(gain.value)
+        result["gain_range"] = [int(gainmin.value), int(gainmax.value)]
+    except Exception:
+        pass
+    return result
+
+
+def _read_grabber_settings(hGrabber):
+    settings = {}
+    settings.update(_safe_get_exposure_settings(hGrabber))
+    settings.update(_safe_get_gain_settings(hGrabber))
+    return settings
+
+
+def _apply_settings_to_grabber(hGrabber, settings):
+    if not settings:
+        return
+    try:
+        if settings.get("exposure_auto") is not None:
+            ic.IC_SetPropertySwitch(
+                hGrabber,
+                tis.T("Exposure"),
+                tis.T("Auto"),
+                int(settings["exposure_auto"]),
+            )
+    except Exception:
+        pass
+    try:
+        if settings.get("exposure") is not None:
+            ic.IC_SetPropertyAbsoluteValue(
+                hGrabber,
+                tis.T("Exposure"),
+                tis.T("Value"),
+                ctypes.c_float(float(settings["exposure"])),
+            )
+    except Exception:
+        pass
+    try:
+        if settings.get("gain") is not None:
+            ic.IC_SetPropertyValue(
+                hGrabber,
+                tis.T("Gain"),
+                tis.T("Value"),
+                ctypes.c_long(int(settings["gain"])),
+            )
+    except Exception:
+        pass
+
+
+def _fallback_xml_path():
+    return DEVICE_XML_PATH
+
+
+def _resolve_source_xml_path(source_xml_raw=None):
+    candidates = []
+    if source_xml_raw:
+        candidates.append(Path(source_xml_raw))
+
+    candidates.extend(
+        [
+            _fallback_xml_path(),
+            DEVICE_XML_TEMPLATE,
+            Path(__file__).resolve().parent / "devicef1.xml",
+            Path.cwd() / "flask-server" / "routes" / "devicef1.xml",
+            Path.cwd() / "routes" / "devicef1.xml",
+        ]
+    )
+
+    for candidate in candidates:
+        try:
+            if candidate.exists():
+                return candidate.resolve()
+        except Exception:
+            continue
+    return None
+
+
+def _current_xml_path():
+    global active_profile_id
+    if active_profile_id:
+        profile = _resolve_profile(active_profile_id)
+        if profile and profile.get("xml_path"):
+            return Path(profile["xml_path"])
+    return _fallback_xml_path()
+
+def start_camera(profile_id=None):
+    global camera, active_profile_id
+
+    if profile_id is not None:
+        active_profile_id = profile_id
+
+    config_path = _current_xml_path()
+    config_file = str(config_path)
+
+    # If no xml exists for current selection, ask user to select camera and persist.
     if not os.path.exists(config_file):
-        print("devicef1.xml bulunamadı -> kamera seçimi açılıyor...")
+        print("Camera profile xml not found -> opening camera selection dialog...")
         hGrabber = ic.IC_ShowDeviceSelectionDialog(None)
 
         if ic.IC_IsDevValid(hGrabber):
             ic.IC_SaveDeviceStateToFile(hGrabber, tis.T(config_file))
             ic.IC_ReleaseGrabber(hGrabber)
         else:
-            print("Kullanıcı kamera seçmedi!")
+            print("No camera selected.")
             return False
 
-    # Buraya kadar xml garanti üretilmiş oldu
     if camera is None:
         camera = ic.IC_LoadDeviceStateFromFile(None, tis.T(config_file))
         if not ic.IC_IsDevValid(camera):
@@ -177,7 +435,8 @@ def get_current_frame():
 
 @camera_bp.route('/start_camera')
 def start_camera_route():
-    if start_camera():
+    profile_id = request.args.get("profile_id")
+    if start_camera(profile_id=profile_id):
         return jsonify({'status': 'Camera started'})
     return jsonify({'error': 'Failed to start camera'}), 500
 
@@ -192,6 +451,227 @@ def stop_camera_route():
     except Exception as e:
         print("Kamera durdurma hatası:", e)
         return jsonify({'error': str(e)}), 500
+
+
+@camera_bp.route('/camera_profiles', methods=['GET'])
+def get_camera_profiles():
+    global active_profile_id
+    data = _load_profiles_store()
+    stored_active = data.get("active_profile_id")
+    if stored_active and not active_profile_id:
+        active_profile_id = stored_active
+    if active_profile_id and stored_active != active_profile_id:
+        data["active_profile_id"] = active_profile_id
+        _save_profiles_store(data)
+
+    return jsonify({
+        "profiles": data.get("profiles", []),
+        "active_profile_id": active_profile_id,
+    })
+
+
+@camera_bp.route('/camera_profiles/create', methods=['POST'])
+def create_camera_profile():
+    payload = request.get_json(silent=True) or {}
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Profile name is required"}), 400
+
+    hGrabber = ic.IC_ShowDeviceSelectionDialog(None)
+    if not ic.IC_IsDevValid(hGrabber):
+        try:
+            ic.IC_ReleaseGrabber(hGrabber)
+        except Exception:
+            pass
+        return jsonify({"error": "No device selected"}), 400
+
+    _ensure_profile_storage()
+    profile_id = f"profile_{int(datetime.now().timestamp() * 1000)}"
+    xml_path = CAMERA_PROFILES_DIR / f"{profile_id}.xml"
+    ic.IC_SaveDeviceStateToFile(hGrabber, tis.T(str(xml_path)))
+    settings = _read_grabber_settings(hGrabber)
+    ic.IC_ReleaseGrabber(hGrabber)
+
+    data = _load_profiles_store()
+    profile = {
+        "id": profile_id,
+        "name": name,
+        "xml_path": str(xml_path),
+        "created_at": datetime.now().isoformat(),
+        "settings": settings,
+        "camera_identity": _extract_camera_identity_from_xml(xml_path),
+    }
+    data["profiles"].append(profile)
+    data["active_profile_id"] = profile_id
+    _save_profiles_store(data)
+
+    return jsonify({"status": "success", "profile": profile, "active_profile_id": profile_id})
+
+
+@camera_bp.route('/camera_profiles/create_from_xml', methods=['POST'])
+def create_camera_profile_from_xml():
+    global active_profile_id
+    payload = request.get_json(silent=True) or {}
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Profile name is required"}), 400
+
+    source_xml_raw = payload.get("source_xml_path")
+    source_xml = _resolve_source_xml_path(source_xml_raw)
+    if source_xml is None:
+        return jsonify({"error": "Source xml not found. Expected devicef1.xml in routes folder."}), 404
+
+    _ensure_profile_storage()
+    profile_id = f"profile_{int(datetime.now().timestamp() * 1000)}"
+    target_xml = CAMERA_PROFILES_DIR / f"{profile_id}.xml"
+    shutil.copy2(source_xml, target_xml)
+
+    profile = {
+        "id": profile_id,
+        "name": name,
+        "xml_path": str(target_xml),
+        "created_at": datetime.now().isoformat(),
+        "settings": {},
+        "source_xml_path": str(source_xml),
+        "camera_identity": _extract_camera_identity_from_xml(target_xml),
+    }
+
+    data = _load_profiles_store()
+    data["profiles"].append(profile)
+    data["active_profile_id"] = profile_id
+    active_profile_id = profile_id
+    _save_profiles_store(data)
+
+    return jsonify({"status": "success", "profile": profile, "active_profile_id": profile_id})
+
+
+@camera_bp.route('/camera_profiles/activate', methods=['POST'])
+def activate_camera_profile():
+    global active_profile_id
+    payload = request.get_json(silent=True) or {}
+    profile_id = payload.get("profile_id")
+    if not profile_id:
+        return jsonify({"error": "profile_id is required"}), 400
+
+    profile = _resolve_profile(profile_id)
+    if not profile:
+        return jsonify({"error": "Profile not found"}), 404
+
+    active_profile_id = profile_id
+    data = _load_profiles_store()
+    data["active_profile_id"] = profile_id
+    _save_profiles_store(data)
+
+    stop_camera()
+    started = start_camera(profile_id=profile_id)
+
+    return jsonify({
+        "status": "success" if started else "warning",
+        "message": "Profile activated" if started else "Profile set, but camera could not start.",
+        "active_profile_id": profile_id,
+    })
+
+
+@camera_bp.route('/camera_profiles/delete', methods=['POST'])
+def delete_camera_profile():
+    global active_profile_id
+    payload = request.get_json(silent=True) or {}
+    profile_id = payload.get("profile_id")
+    if not profile_id:
+        return jsonify({"error": "profile_id is required"}), 400
+    if profile_id == DEFAULT_PROFILE_ID:
+        return jsonify({"error": "Default profile cannot be deleted"}), 400
+
+    data = _load_profiles_store()
+    profiles = data.get("profiles", [])
+    target = None
+    remaining = []
+    for item in profiles:
+        if item.get("id") == profile_id:
+            target = item
+        else:
+            remaining.append(item)
+
+    if target is None:
+        return jsonify({"error": "Profile not found"}), 404
+
+    xml_path_raw = target.get("xml_path")
+    if xml_path_raw:
+        try:
+            xml_path = Path(xml_path_raw)
+            if xml_path.exists():
+                xml_path.unlink()
+        except Exception as e:
+            print(f"Failed to delete profile xml: {e}")
+
+    was_active = active_profile_id == profile_id
+    data["profiles"] = remaining
+
+    if was_active:
+        active_profile_id = remaining[0]["id"] if remaining else None
+        data["active_profile_id"] = active_profile_id
+        stop_camera()
+        if active_profile_id:
+            start_camera(profile_id=active_profile_id)
+    else:
+        if data.get("active_profile_id") == profile_id:
+            data["active_profile_id"] = active_profile_id
+
+    _save_profiles_store(data)
+    return jsonify({
+        "status": "success",
+        "deleted_profile_id": profile_id,
+        "active_profile_id": active_profile_id,
+    })
+
+
+@camera_bp.route('/camera_profiles/update_settings', methods=['POST'])
+def update_camera_profile_settings():
+    payload = request.get_json(silent=True) or {}
+    profile_id = payload.get("profile_id")
+    if not profile_id:
+        return jsonify({"error": "profile_id is required"}), 400
+
+    profile = _resolve_profile(profile_id)
+    if not profile:
+        return jsonify({"error": "Profile not found"}), 404
+
+    xml_path = Path(profile.get("xml_path", ""))
+    if not xml_path.exists():
+        return jsonify({"error": "Profile xml file not found"}), 404
+
+    hGrabber = ic.IC_LoadDeviceStateFromFile(None, tis.T(str(xml_path)))
+    if not ic.IC_IsDevValid(hGrabber):
+        try:
+            ic.IC_ReleaseGrabber(hGrabber)
+        except Exception:
+            pass
+        return jsonify({"error": "Profile camera state is invalid"}), 500
+
+    desired_settings = {
+        "exposure_auto": payload.get("exposure_auto"),
+        "exposure": payload.get("exposure"),
+        "gain": payload.get("gain"),
+    }
+    _apply_settings_to_grabber(hGrabber, desired_settings)
+    ic.IC_SaveDeviceStateToFile(hGrabber, tis.T(str(xml_path)))
+    merged_settings = _read_grabber_settings(hGrabber)
+    ic.IC_ReleaseGrabber(hGrabber)
+
+    data = _load_profiles_store()
+    updated = None
+    for item in data.get("profiles", []):
+        if item.get("id") == profile_id:
+            item["settings"] = merged_settings
+            updated = item
+            break
+    _save_profiles_store(data)
+
+    if profile_id == active_profile_id:
+        stop_camera()
+        start_camera(profile_id=profile_id)
+
+    return jsonify({"status": "success", "profile": updated})
 
 
 @camera_bp.route('/current_frame')
@@ -226,7 +706,7 @@ def save_txt():
             return jsonify({'error': 'Invalid image data'}), 400
 
         # Create directories
-        temp_text_dir = BASE_DIR / "temp_texts"
+        temp_text_dir = TEMP_TEXTS_DIR
         print("text dir",temp_text_dir)
 
         temp_text_dir.mkdir(parents=True, exist_ok=True)
@@ -272,6 +752,18 @@ def save_txt():
                     f.write(f"  R_diff: {scores.get('R', 0):.4f}\n")
                     f.write(f"  G_diff: {scores.get('G', 0):.4f}\n")
                     f.write(f"  B_diff: {scores.get('B', 0):.4f}\n")
+                elif measure_type == "edge":
+                    if "score" in r:
+                        f.write(f"  Found: {bool(r.get('found', False))}\n")
+                        f.write(f"  Count: {int(r.get('count', 0) or 0)}\n")
+                        f.write(f"  Score: {float(r.get('score', 0) or 0):.4f}\n")
+                        f.write(f"  Tolerance: {float(r.get('tolerance', 0) or 0):.4f}\n")
+                        f.write(f"  AreaRatio: {float(r.get('area_ratio', 0) or 0):.4f}\n")
+                    else:
+                        f.write(f"  Edge: {float(r.get('edge_density', 0)):.4f}\n")
+                        f.write(f"  Ref: {float(r.get('ref_density', 0)):.4f}\n")
+                        f.write(f"  Diff: {float(r.get('diff', 0)):.4f}\n")
+                        f.write(f"  Tolerance: {float(r.get('tolerance', 0)):.4f}\n")
                 f.write(f"  RESULT: {r['status']}\n\n")
 
         return jsonify({"saved": True, "filename": f"{filename_base}.jpg"})
@@ -346,7 +838,7 @@ def save_frame_with_polygons():
         cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0, frame)
 
         # Kaydetme
-        temp_frame_dir = BASE_DIR / "temp_frames"
+        temp_frame_dir = TEMP_FRAMES_DIR
         temp_frame_dir.mkdir(parents=True, exist_ok=True)
 
         if datetime_str:
@@ -376,7 +868,7 @@ def save_ml_pre_proc():
         results = data.get("results")
 
         # Ana klasör → ml/type_no/prog_no
-        save_dir = BASE_DIR / "ml" / str(type_no) / str(prog_no)
+        save_dir = ML_ROOT_DIR / str(type_no) / str(prog_no)
         save_dir.mkdir(parents=True, exist_ok=True)
         print("ML PRE PROC SAVE DIR:", save_dir)
 
@@ -505,8 +997,13 @@ def device_xml_save():
     hGrabber = ic.IC_ShowDeviceSelectionDialog(None)
 
     if ic.IC_IsDevValid(hGrabber):
-        ic.IC_SaveDeviceStateToFile(hGrabber, tis.T("./routes/device.xml"))
-        response = {"status": "success", "message": "Ayarlar device.xml olarak kaydedildi."}
+        xml_path_str = str(_fallback_xml_path())
+        ic.IC_SaveDeviceStateToFile(hGrabber, tis.T(xml_path_str))
+        response = {
+            "status": "success",
+            "message": "Ayarlar devicef1.xml olarak kaydedildi.",
+            "xml_saved_to": xml_path_str,
+        }
     else:
         ic.IC_MsgBox(tis.T("No device opened"), tis.T("Simple Live Video"))
         response = {"status": "error", "message": "Cihaz açık değil veya geçersiz."}
@@ -522,51 +1019,180 @@ def configure_camera_properties():
         ic.IC_ReleaseGrabber(hGrabber)
         return jsonify({"status": "error", "message": "No device opened."})
 
-    # Exposure Auto bilgisi alınıyor
-    exposureauto = ctypes.c_long()
-    ic.IC_SetPropertySwitch(hGrabber, tis.T("Exposure"), tis.T("Auto"), exposureauto)
-    auto_exposure_value = exposureauto.value
-
-    # Auto kapat, manuel exposure değeri ayarla
-    ic.IC_SetPropertySwitch(hGrabber, tis.T("Exposure"), tis.T("Auto"), 0)
-    ic.IC_SetPropertyAbsoluteValue(hGrabber, tis.T("Exposure"), tis.T("Value"), ctypes.c_float(0.0303))
-
-    # Exposure değerini ve aralığını al
-    expmin = ctypes.c_float()
-    expmax = ctypes.c_float()
-    exposure = ctypes.c_float()
-    ic.IC_GetPropertyAbsoluteValue(hGrabber, tis.T("Exposure"), tis.T("Value"), exposure)
-    ic.IC_GetPropertyAbsoluteValueRange(hGrabber, tis.T("Exposure"), tis.T("Value"), expmin, expmax)
-
-    # Gain bilgisi
-    gainmin = ctypes.c_long()
-    gainmax = ctypes.c_long()
-    gain = ctypes.c_long()
-    ic.IC_GetPropertyValue(hGrabber, tis.T("Gain"), tis.T("Value"), gain)
-    ic.IC_GetPropertyValueRange(hGrabber, tis.T("Gain"), tis.T("Value"), gainmin, gainmax)
-
-    # Focus denemesi
-    focus_result = ic.IC_PropertyOnePush(hGrabber, tis.T("Focus"), tis.T("One Push"))
-    focus_message = "Focus ayarlandı." if focus_result != -4 else "Kamera Focus özelliğini desteklemiyor."
-
-    # ✅ Ayarları XML olarak kaydet (otomatik)
-    xml_path = tis.T("./routes/devicef1.xml")
-    ic.IC_SaveDeviceStateToFile(hGrabber, xml_path)
+    xml_path_str = str(_fallback_xml_path())
+    ic.IC_SaveDeviceStateToFile(hGrabber, tis.T(xml_path_str))
 
     ic.IC_ReleaseGrabber(hGrabber)
 
     return jsonify({
         "status": "success",
-        "exposure_auto": auto_exposure_value,
-        "exposure": exposure.value,
-        "exposure_range": [expmin.value, expmax.value],
-        "gain": gain.value,
-        "gain_range": [gainmin.value, gainmax.value],
-        "focus_message": focus_message,
-        "xml_saved_to": "./routes/devicef1.xml"
+        "message": "Device configuration saved.",
+        "xml_saved_to": xml_path_str
     })
 
 # =================== Calculate Methods =====================
+def _decode_image_data_url(image_data_url: str):
+    header, encoded = image_data_url.split(",", 1)
+    image_bytes = base64.b64decode(encoded)
+    frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+    return frame
+
+
+def _polygon_binary_and_mask(gray_frame, points, threshold_value):
+    coords = [(int(p["x"]), int(p["y"])) for p in points]
+    pts = np.array(coords, dtype=np.int32)
+    x, y, w, h = cv2.boundingRect(pts)
+    if w <= 1 or h <= 1:
+        return None, None, None
+
+    roi_gray = gray_frame[y:y + h, x:x + w]
+    local_pts = pts - np.array([x, y], dtype=np.int32)
+
+    mask = np.zeros((h, w), dtype=np.uint8)
+    cv2.fillPoly(mask, [local_pts], 255)
+
+    thr = int(np.clip(threshold_value, 0, 255))
+    _, binary = cv2.threshold(roi_gray, thr, 255, cv2.THRESH_BINARY)
+    binary = cv2.bitwise_and(binary, binary, mask=mask)
+    return binary, (x, y, w, h), mask
+
+
+def _hu_log_signature(contour):
+    moments = cv2.moments(contour)
+    hu = cv2.HuMoments(moments).flatten()
+    hu = np.where(np.abs(hu) < 1e-30, 1e-30, hu)
+    return (-np.sign(hu) * np.log10(np.abs(hu))).astype(np.float32)
+
+
+@camera_bp.route('/teach_edge_pattern', methods=['POST'])
+def teach_edge_pattern():
+    try:
+        data = request.get_json()
+        polygons = data.get("polygons") or []
+        image_data_url = data.get("image")
+
+        if not polygons or not image_data_url:
+            return jsonify({"error": "Polygons or image data missing"}), 400
+
+        frame = _decode_image_data_url(image_data_url)
+        if frame is None:
+            return jsonify({'error': 'Invalid image data'}), 400
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        taught = []
+        for poly in polygons:
+            points = poly.get("points") or []
+            if not points:
+                continue
+
+            threshold_value = float(poly.get("edge_pattern_threshold", 120) or 120)
+            binary, bbox, _ = _polygon_binary_and_mask(gray, points, threshold_value)
+            if binary is None:
+                taught.append({"id": poly.get("id"), "error": "invalid_polygon"})
+                continue
+
+            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = [c for c in contours if cv2.contourArea(c) > 30]
+            if not contours:
+                taught.append({"id": poly.get("id"), "error": "no_contour"})
+                continue
+
+            best = max(contours, key=cv2.contourArea)
+            area = float(cv2.contourArea(best))
+            hu_log = _hu_log_signature(best).tolist()
+
+            taught.append({
+                "id": poly.get("id"),
+                "edge_pattern_hu": hu_log,
+                "edge_pattern_area": area,
+                "edge_pattern_threshold": threshold_value,
+            })
+
+        return jsonify({"taught": taught}), 200
+    except Exception as e:
+        import traceback
+        print("teach_edge_pattern HATASI:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+
+@camera_bp.route('/measure_edge_pattern', methods=['POST'])
+def measure_edge_pattern():
+    try:
+        data = request.get_json()
+        polygons = data.get("polygons") or []
+        image_data_url = data.get("image")
+
+        if not polygons or not image_data_url:
+            return jsonify({"error": "Polygons or image data missing"}), 400
+
+        frame = _decode_image_data_url(image_data_url)
+        if frame is None:
+            return jsonify({'error': 'Invalid image data'}), 400
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        results = []
+        for poly in polygons:
+            poly_id = poly.get("id")
+            teach_hu = poly.get("edge_pattern_hu") or []
+            teach_area = float(poly.get("edge_pattern_area", 0) or 0)
+            threshold_value = float(poly.get("edge_pattern_threshold", 120) or 120)
+            score_tol = float(poly.get("edge_tolerance", 1.0) or 1.0)
+
+            if not teach_hu:
+                results.append({"id": poly_id, "status": "NOK", "found": False, "reason": "teach_missing"})
+                continue
+
+            thr = int(np.clip(threshold_value, 0, 255))
+            _, binary = cv2.threshold(gray, thr, 255, cv2.THRESH_BINARY)
+
+            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = [c for c in contours if cv2.contourArea(c) > 30]
+            if not contours:
+                results.append({"id": poly_id, "status": "NOK", "found": False, "reason": "no_contour", "count": 0, "detections": []})
+                continue
+
+            teach_vec = np.array(teach_hu, dtype=np.float32)
+            detections = []
+            best_score = None
+            for contour in contours:
+                cand_vec = _hu_log_signature(contour)
+                score = float(np.sum(np.abs(cand_vec - teach_vec)))
+                area = float(cv2.contourArea(contour))
+                area_ratio = (area / teach_area) if teach_area > 1e-6 else 0.0
+                area_ok = (teach_area <= 1e-6) or (0.4 <= area_ratio <= 2.5)
+                if score <= score_tol and area_ok:
+                    pts = [{"x": int(pt[0][0]), "y": int(pt[0][1])} for pt in contour]
+                    detections.append({
+                        "score": score,
+                        "area_ratio": area_ratio,
+                        "points": pts,
+                    })
+                    if best_score is None or score < best_score:
+                        best_score = score
+
+            count = len(detections)
+            is_ok = count > 0
+            status = "OK" if is_ok else "NOK"
+
+            results.append({
+                "id": poly_id,
+                "found": is_ok,
+                "count": count,
+                "score": float(best_score) if best_score is not None else None,
+                "tolerance": score_tol,
+                "area_ratio": float(detections[0]["area_ratio"]) if detections else 0.0,
+                "teach_area": float(teach_area),
+                "detections": detections,
+                "status": status,
+            })
+
+        return jsonify({"results": results}), 200
+    except Exception as e:
+        import traceback
+        print("measure_edge_pattern HATASI:\n", traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+
 @camera_bp.route('/calculate_rgbi', methods=['POST'])
 def calculate_rgbi():
     try:
@@ -1085,4 +1711,5 @@ def train_ml_model_per_tool():
         import traceback
         print("🔴 train_ml_model HATASI:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+
 

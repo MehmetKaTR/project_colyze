@@ -1,30 +1,19 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
-const http = require('http');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
+const http = require('http');
 
 let win;
 let pythonProcess;
+let isAppQuitting = false;
+let backendLogStream = null;
+let backendLogPath = null;
 
 const PYTHON_PORT = 5050;
 const isDev = !app.isPackaged;
 
-// 🔹 Backend sağ mı kontrol
-function checkBackendReady() {
-  return new Promise((resolve) => {
-    const interval = setInterval(() => {
-      http.get(`http://127.0.0.1:${PYTHON_PORT}`, (res) => {
-        if (res.statusCode === 200 || res.statusCode === 404) {
-          clearInterval(interval);
-          resolve(true);
-        }
-      }).on('error', () => {});
-    }, 800);
-  });
-}
-
-// 🔹 Temp klasörlerini temizle
+// Temp klasörlerini temizle
 function clearTempFolders() {
   const baseDir = isDev
     ? path.join(__dirname, 'flask-server')
@@ -48,24 +37,132 @@ function clearTempFolders() {
   console.log('Temp folders cleared from Electron');
 }
 
-// 🔹 Python başlat
+// Python başlat
 function startPython() {
-  const pythonExePath = isDev
-    ? path.join(__dirname, 'flask-server', 'app.exe')
-    : path.join(process.resourcesPath, 'flask-server', 'app.exe');
+  if (pythonProcess) return;
+
+  const pythonExePath = resolveBackendExePath();
+  if (!pythonExePath) {
+    const msg = [
+      'Backend executable not found.',
+      'Expected one of:',
+      isDev
+        ? path.join(__dirname, 'flask-server', 'dist', 'app.exe')
+        : path.join(process.resourcesPath, 'flask-server', 'dist', 'app.exe'),
+    ].join('\n');
+    dialog.showErrorBox('Colyze Backend Error', msg);
+    app.quit();
+    return;
+  }
 
   console.log('Python EXE path:', pythonExePath);
 
-  pythonProcess = spawn(pythonExePath, [], { stdio: 'inherit' });
+  const runtimeDir = path.join(app.getPath('userData'), 'backend_runtime');
+  try {
+    fs.mkdirSync(runtimeDir, { recursive: true });
+  } catch (e) {
+    console.error('Cannot create runtime dir:', runtimeDir, e);
+  }
+  backendLogPath = path.join(runtimeDir, 'backend.log');
+  try {
+    backendLogStream = fs.createWriteStream(backendLogPath, { flags: 'a' });
+    backendLogStream.write(`\n\n===== ${new Date().toISOString()} backend start =====\n`);
+    backendLogStream.write(`exe: ${pythonExePath}\n`);
+    backendLogStream.write(`runtimeDir: ${runtimeDir}\n`);
+  } catch (e) {
+    console.error('Cannot open backend log file:', e);
+  }
 
-  pythonProcess.on('close', (code) => console.log(`Python EXE kapandı. Kod: ${code}`));
+  pythonProcess = spawn(pythonExePath, [], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+    env: {
+      ...process.env,
+      COLYZE_RUNTIME_DIR: runtimeDir,
+      PYTHONUNBUFFERED: '1',
+    },
+  });
+
+  if (pythonProcess.stdout) {
+    pythonProcess.stdout.on('data', (chunk) => {
+      const text = chunk.toString();
+      process.stdout.write(text);
+      if (backendLogStream) backendLogStream.write(text);
+    });
+  }
+  if (pythonProcess.stderr) {
+    pythonProcess.stderr.on('data', (chunk) => {
+      const text = chunk.toString();
+      process.stderr.write(text);
+      if (backendLogStream) backendLogStream.write(text);
+    });
+  }
+
+  pythonProcess.on('close', (code) => {
+    console.log(`Python EXE kapandı. Kod: ${code}`);
+    if (backendLogStream) {
+      backendLogStream.write(`\n===== backend close code=${code} =====\n`);
+      backendLogStream.end();
+      backendLogStream = null;
+    }
+    pythonProcess = null;
+    if (!isAppQuitting && code !== 0) {
+      console.error('Backend beklenmedik şekilde kapandı.');
+      dialog.showErrorBox(
+        'Colyze Backend Crashed',
+        `Backend process exited with code ${code}.\nLog: ${backendLogPath || 'N/A'}`
+      );
+    }
+  });
+
+  pythonProcess.on('error', (err) => {
+    console.error('Python process error:', err);
+    if (backendLogStream) {
+      backendLogStream.write(`\n[spawn error] ${String(err)}\n`);
+      backendLogStream.end();
+      backendLogStream = null;
+    }
+    dialog.showErrorBox(
+      'Colyze Backend Start Error',
+      `Failed to start backend process.\nLog: ${backendLogPath || 'N/A'}\nError: ${err.message || err}`
+    );
+  });
 }
 
-// 🔹 Python durdur
+function resolveBackendExePath() {
+  const candidates = isDev
+    ? [
+        path.join(__dirname, 'flask-server', 'app.exe'),
+        path.join(__dirname, 'flask-server', 'dist', 'app.exe'),
+      ]
+    : [
+        path.join(process.resourcesPath, 'flask-server', 'app.exe'),
+        path.join(process.resourcesPath, 'flask-server', 'dist', 'app.exe'),
+      ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+// Python durdur
 function stopPython() {
   if (pythonProcess) {
     try {
+      const pid = pythonProcess.pid;
       pythonProcess.kill();
+      if (pid) {
+        setTimeout(() => {
+          if (pythonProcess) {
+            try {
+              spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+            } catch (e) {
+              console.error('taskkill error:', e);
+            }
+          }
+        }, 1200);
+      }
     } catch (err) {
       console.error('Python kapanırken hata:', err);
     }
@@ -74,12 +171,10 @@ function stopPython() {
   }
 }
 
-// 🔹 Pencere oluştur
+// Pencere oluştur
 async function createWindow() {
   startPython();
   console.log('⏳ Flask backend başlatılıyor...');
-  await checkBackendReady();
-  console.log('✅ Flask backend hazır.');
 
   win = new BrowserWindow({
     width: 1920,
@@ -99,10 +194,10 @@ async function createWindow() {
 
   win.loadFile(indexPath);
 
-  // ❌ Otomatik açma kapatıldı — gizli olacak
+  // Otomatik açma kapatıldı — gizli olacak
   // win.webContents.openDevTools({ mode: 'detach' });
 
-  // 🔐 DEVTOOLS GİZLİ TETİKLEME MEKANİZMASI (F10 x 3)
+  // DEVTOOLS GİZLİ TETİKLEME MEKANİZMASI (F10 x 3)
   let f10Count = 0;
   let f10Timer = null;
 
@@ -128,7 +223,7 @@ async function createWindow() {
     }
   });
 
-  // 🔐 güvenli kapanış
+  // güvenli kapanış
   win.on('close', () => {
     if (pythonProcess) {
       stopPython();
@@ -138,7 +233,7 @@ async function createWindow() {
   });
 }
 
-// 🔹 IPC eventleri
+// IPC eventleri
 ipcMain.on('window-minimize', () => win && win.minimize());
 ipcMain.on('window-maximize', () => {
   if (!win) return;
@@ -147,13 +242,54 @@ ipcMain.on('window-maximize', () => {
 });
 ipcMain.on('window-close', () => win && win.close());
 
-// 🔹 Electron lifecycle
+// Electron lifecycle
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
+  isAppQuitting = true;
   stopPython();
   if (process.platform !== 'darwin') app.quit();
   clearTempFolders();
 });
 
-app.on('before-quit', () => stopPython());
+app.on('before-quit', () => {
+  isAppQuitting = true;
+  stopPython();
+});
+
+function pingBackend(pathname = '/healthz', timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    const req = http.get(
+      {
+        hostname: '127.0.0.1',
+        port: PYTHON_PORT,
+        path: pathname,
+        timeout: timeoutMs,
+      },
+      (res) => {
+        resolve(res.statusCode >= 200 && res.statusCode < 300);
+        res.resume();
+      }
+    );
+    req.on('timeout', () => {
+      req.destroy(new Error('timeout'));
+      resolve(false);
+    });
+    req.on('error', () => resolve(false));
+  });
+}
+
+ipcMain.handle('backend-wait-ready', async (_event, payload = {}) => {
+  const pathname = typeof payload.path === 'string' ? payload.path : '/healthz';
+  const timeoutMs = Number(payload.timeoutMs || 35000);
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const ok = await pingBackend(pathname, 2000);
+    if (ok) return { ok: true };
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  return { ok: false, logPath: backendLogPath || null };
+-quit', () => {
+  isAppQuitting = true;
+  stopPython();
+});

@@ -4,4 +4,5 @@ contextBridge.exposeInMainWorld('electron', {
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
+  waitBackendReady: (path, timeoutMs) => ipcRenderer.invoke('backend-wait-ready', { path, timeoutMs }),
 });

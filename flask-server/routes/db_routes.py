@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 import base64
-from db.models import Session, TypesF1, PolySettingsF1, ToolsF1, Results, HistTeach, TypeImages, RGBITeach
+import json
+from db.models import Session, TypesF1, PolySettingsF1, ToolsF1, Results, HistTeach, TypeImages, RGBITeach, EdgePatternTeach
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, BigInteger
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -222,10 +223,64 @@ def get_tools_by_typeprog():
     tools = {}
     for t in tools_query:
         if t.ToolNo not in tools:
-            tools[t.ToolNo] = []
-        tools[t.ToolNo].append({'x': t.X, 'y': t.Y})
+            tools[t.ToolNo] = {
+                "points": [],
+                "r": float(getattr(t, "R_Tole", 0) or 0),
+                "g": float(getattr(t, "G_Tole", 0) or 0),
+                "b": float(getattr(t, "B_Tole", 0) or 0),
+                "i": float(getattr(t, "I_Tole", 0) or 0),
+                "hist_tolerance": float(getattr(t, "Hist_Tolerance", 0.1) or 0.1),
+                "edge_tolerance": float(getattr(t, "Edge_Tolerance", 0.08) or 0.08),
+                "edge_ref_density": float(getattr(t, "Edge_Ref_Density", 0) or 0),
+                "edge_pattern_hu": getattr(t, "Edge_Pattern_Hu", "") or "",
+                "edge_pattern_area": float(getattr(t, "Edge_Pattern_Area", 0) or 0),
+                "edge_pattern_threshold": float(getattr(t, "Edge_Pattern_Threshold", 120) or 120),
+            }
+        tools[t.ToolNo]["points"].append({'x': t.X, 'y': t.Y})
 
-    result = [{'id': tool_no, 'points': points, 'status': 'empty', "hist_tolerance": 0.1} for tool_no, points in tools.items()]
+    rgbi_rows = session.query(RGBITeach).filter_by(TypeNo=type_no, ProgNo=prog_no).all()
+    rgbi_map = {int(r.Tool_ID): r for r in rgbi_rows}
+
+    hist_rows = session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no).all()
+    hist_map = {}
+    for row in hist_rows:
+        tid = int(row.Tool_ID)
+        if tid not in hist_map and getattr(row, "Hist_Tolerance", None) is not None:
+            hist_map[tid] = float(row.Hist_Tolerance)
+
+    edge_rows = session.query(EdgePatternTeach).filter_by(TypeNo=type_no, ProgNo=prog_no).all()
+    edge_map = {int(r.Tool_ID): r for r in edge_rows}
+
+    result = []
+    for tool_no, item in tools.items():
+        rgbi = rgbi_map.get(tool_no)
+        hist_tol = hist_map.get(tool_no, item["hist_tolerance"])
+        edge_teach = edge_map.get(tool_no)
+        try:
+            edge_pattern_hu = json.loads(item["edge_pattern_hu"]) if item["edge_pattern_hu"] else []
+        except Exception:
+            edge_pattern_hu = []
+        if edge_teach and getattr(edge_teach, "Pattern_Hu", None):
+            try:
+                edge_pattern_hu = json.loads(edge_teach.Pattern_Hu)
+            except Exception:
+                pass
+
+        result.append({
+            "id": tool_no,
+            "points": item["points"],
+            "status": "empty",
+            "r": float(getattr(rgbi, "R_Tole", item["r"]) or item["r"]),
+            "g": float(getattr(rgbi, "G_Tole", item["g"]) or item["g"]),
+            "b": float(getattr(rgbi, "B_Tole", item["b"]) or item["b"]),
+            "i": float(getattr(rgbi, "I_Tole", item["i"]) or item["i"]),
+            "hist_tolerance": float(hist_tol),
+            "edge_tolerance": float(getattr(edge_teach, "Score_Tolerance", item["edge_tolerance"]) or item["edge_tolerance"]),
+            "edge_ref_density": float(item["edge_ref_density"]),
+            "edge_pattern_hu": edge_pattern_hu,
+            "edge_pattern_area": float(getattr(edge_teach, "Pattern_Area", item["edge_pattern_area"]) or item["edge_pattern_area"]),
+            "edge_pattern_threshold": float(getattr(edge_teach, "Threshold", item["edge_pattern_threshold"]) or item["edge_pattern_threshold"]),
+        })
     return jsonify(result)
 
 
@@ -247,6 +302,17 @@ def update_polygons():
     for polygon in polygons:
         tool_no = polygon['id']
         points = polygon['points']
+        r_tole = float(polygon.get('r', 0) or 0)
+        g_tole = float(polygon.get('g', 0) or 0)
+        b_tole = float(polygon.get('b', 0) or 0)
+        i_tole = float(polygon.get('i', 0) or 0)
+        hist_tol = float(polygon.get('hist_tolerance', 0.1) or 0.1)
+        edge_tol = float(polygon.get('edge_tolerance', 0.08) or 0.08)
+        edge_ref = float(polygon.get('edge_ref_density', 0) or 0)
+        edge_pattern_hu = polygon.get('edge_pattern_hu', [])
+        edge_pattern_area = float(polygon.get('edge_pattern_area', 0) or 0)
+        edge_pattern_threshold = float(polygon.get('edge_pattern_threshold', 120) or 120)
+        edge_pattern_hu_json = json.dumps(edge_pattern_hu) if isinstance(edge_pattern_hu, list) else ""
         for idx, point in enumerate(points):
             new_tool = ToolsF1(
                 TypeNo=type_no,
@@ -254,7 +320,17 @@ def update_polygons():
                 ToolNo=tool_no,
                 CornerNo=idx + 1,
                 X=point['x'],
-                Y=point['y']
+                Y=point['y'],
+                R_Tole=r_tole,
+                G_Tole=g_tole,
+                B_Tole=b_tole,
+                I_Tole=i_tole,
+                Hist_Tolerance=hist_tol,
+                Edge_Tolerance=edge_tol,
+                Edge_Ref_Density=edge_ref,
+                Edge_Pattern_Hu=edge_pattern_hu_json,
+                Edge_Pattern_Area=edge_pattern_area,
+                Edge_Pattern_Threshold=edge_pattern_threshold,
             )
             session.add(new_tool)
 
@@ -277,6 +353,7 @@ def delete_polygon():
     if tool_exists:
         session.query(ToolsF1).filter_by(TypeNo=type_no, ProgNo=prog_no, ToolNo=tool_id).delete()
         session.query(HistTeach).filter_by(TypeNo=type_no, ProgNo=prog_no, Tool_ID=tool_id).delete()
+        session.query(EdgePatternTeach).filter_by(TypeNo=type_no, ProgNo=prog_no, Tool_ID=tool_id).delete()
         session.commit()
         return jsonify({"message": f"Polygon {tool_id} veritabanından silindi."})
     else:
@@ -544,6 +621,12 @@ def save_rgbi():
             I_Tole=float(m["tole_i"]),
         )
         session.add(new_rgbi)
+        session.query(ToolsF1).filter_by(TypeNo=type_no, ProgNo=prog_no, ToolNo=tool_id).update({
+            "R_Tole": float(m["tole_r"]),
+            "G_Tole": float(m["tole_g"]),
+            "B_Tole": float(m["tole_b"]),
+            "I_Tole": float(m["tole_i"]),
+        })
 
     session.commit()
     return jsonify({"status": "OK", "message": "RGBI değerleri kaydedildi"})
@@ -571,11 +654,84 @@ def save_hist():
             ProgNo=prog_no,
             Tool_ID=tool_id
         ).update({"Hist_Tolerance": hist_tol})
+        session.query(ToolsF1).filter_by(
+            TypeNo=type_no,
+            ProgNo=prog_no,
+            ToolNo=tool_id
+        ).update({"Hist_Tolerance": hist_tol})
 
     session.commit()
     return jsonify({"status": "OK", "message": "Histogram toleransları kaydedildi"})
 
 
+
+@db_bp.route('/save_edge_pattern', methods=['POST'])
+def save_edge_pattern():
+    data = request.get_json()
+    type_no = data.get("typeNo")
+    prog_no = data.get("progNo")
+    patterns = data.get("patterns")
+
+    if not all([type_no, prog_no, patterns]):
+        return jsonify({"error": "Eksik veri"}), 400
+
+    session = get_session()
+    for item in patterns:
+        tool_id = int(item.get("id"))
+        hu = item.get("edge_pattern_hu") or []
+        area = float(item.get("edge_pattern_area", 0) or 0)
+        threshold = float(item.get("edge_pattern_threshold", 120) or 120)
+        score_tol = float(item.get("edge_tolerance", 1.0) or 1.0)
+
+        session.query(EdgePatternTeach).filter_by(
+            TypeNo=type_no,
+            ProgNo=prog_no,
+            Tool_ID=tool_id,
+        ).delete()
+
+        session.add(
+            EdgePatternTeach(
+                TypeNo=type_no,
+                ProgNo=prog_no,
+                Tool_ID=tool_id,
+                Pattern_Hu=json.dumps(hu),
+                Pattern_Area=area,
+                Threshold=threshold,
+                Score_Tolerance=score_tol,
+            )
+        )
+
+    session.commit()
+    return jsonify({"status": "OK", "message": "Edge pattern teach kaydedildi"})
+
+
+@db_bp.route('/get_edge_pattern_teach')
+def get_edge_pattern_teach():
+    type_no = request.args.get("typeNo", type=int)
+    prog_no = request.args.get("progNo", type=int)
+
+    if not all([type_no, prog_no]):
+        return jsonify({"error": "Eksik parametre"}), 400
+
+    session = get_session()
+    rows = session.query(EdgePatternTeach).filter_by(TypeNo=type_no, ProgNo=prog_no).order_by(EdgePatternTeach.Tool_ID).all()
+    payload = []
+    for row in rows:
+        try:
+            hu = json.loads(row.Pattern_Hu) if row.Pattern_Hu else []
+        except Exception:
+            hu = []
+        payload.append(
+            {
+                "toolId": int(row.Tool_ID),
+                "edge_pattern_hu": hu,
+                "edge_pattern_area": float(row.Pattern_Area or 0),
+                "edge_pattern_threshold": float(row.Threshold or 120),
+                "edge_tolerance": float(row.Score_Tolerance or 1.0),
+            }
+        )
+
+    return jsonify(payload)
 # =================== SaveResults =====================
 @db_bp.route('/save_results', methods=['POST'])
 def save_results():
@@ -683,3 +839,4 @@ def get_result_by_metadata():
         import traceback
         print("[get_result_by_metadata] Hata:", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+

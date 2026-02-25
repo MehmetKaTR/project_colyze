@@ -8,6 +8,12 @@ body {
   font-family: "Space Grotesk", sans-serif;
   background: #0a0a0a;
   color: #f3f4f6;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  overflow: hidden;
 }
 
 @layer utilities {
@@ -75,4 +81,19 @@ body {
 
 .polygon.focused {
   stroke: red;
+}
+
+@keyframes toastInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(24px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.toast-enter {
+  animation: toastInRight 220ms ease-out;
 }

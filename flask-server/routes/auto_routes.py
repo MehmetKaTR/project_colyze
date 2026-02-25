@@ -1,34 +1,19 @@
-from flask import Blueprint, jsonify, request, send_from_directory
-from pathlib import Path
-import sys
+﻿from flask import Blueprint, jsonify, request, send_from_directory
+
+from path_config import TEMP_FRAMES_DIR, TEMP_TEXTS_DIR, ensure_runtime_layout
 
 auto_bp = Blueprint("auto", __name__)
-
-# 🔹 BASE_DIR: exe veya script çalıştırılmasına göre
-if getattr(sys, 'frozen', False):
-    # PyInstaller exe'si için geçici klasör
-    BASE_DIR = Path(sys.executable).parent
-else:
-    # Normal script çalıştırılırsa
-    BASE_DIR = Path(__file__).resolve().parent.parent
-
-# 🔹 Temp dizinler (dist veya script klasörü içinde)
-TEMP_FRAMES_DIR = BASE_DIR / "temp_frames"
-TEMP_TEXTS_DIR = BASE_DIR / "temp_texts"
-
-# 🔹 Klasörler yoksa oluştur
-TEMP_FRAMES_DIR.mkdir(parents=True, exist_ok=True)
-TEMP_TEXTS_DIR.mkdir(parents=True, exist_ok=True)
+ensure_runtime_layout()
 
 print(f"TEMP_FRAMES_DIR: {TEMP_FRAMES_DIR}")
 print(f"TEMP_TEXTS_DIR: {TEMP_TEXTS_DIR}")
 
-# 🔹 /frames/<filename> route'u frontend için
+
 @auto_bp.route("/frames/<filename>")
 def serve_frame(filename):
     return send_from_directory(TEMP_FRAMES_DIR, filename)
 
-# 🔹 JSON ile frame bilgilerini döndür
+
 @auto_bp.route("/auto_frames", methods=["GET"])
 def get_auto_frames():
     try:
@@ -51,21 +36,23 @@ def get_auto_frames():
             time_str = parts[3]
             measure_type = parts[4] if len(parts) > 4 else "unknown"
 
-            frame_data.append({
-                "typeNo": type_no,
-                "progNo": prog_no,
-                "datetime": f"{dt_str} {time_str}",
-                "measureType": measure_type,
-                "filename": file.name,
-                "path": f"/frames/{file.name}"  # frontend buradan alacak
-            })
+            frame_data.append(
+                {
+                    "typeNo": type_no,
+                    "progNo": prog_no,
+                    "datetime": f"{dt_str} {time_str}",
+                    "measureType": measure_type,
+                    "filename": file.name,
+                    "path": f"/frames/{file.name}",
+                }
+            )
 
         return jsonify(frame_data)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 🔹 Sonuç txt dosyalarını oku
+
 @auto_bp.route("/auto_result_text", methods=["GET"])
 def get_result_text():
     try:
@@ -73,8 +60,8 @@ def get_result_text():
         if not filename:
             return jsonify({"error": "filename is required"}), 400
 
-        filename_base = Path(filename).stem
-        txt_path = TEMP_TEXTS_DIR / f"{filename_base}.txt"
+        filename_base = file_stem = filename.rsplit(".", 1)[0]
+        txt_path = TEMP_TEXTS_DIR / f"{file_stem}.txt"
 
         if not txt_path.exists():
             return jsonify({"error": "Result file not found"}), 404

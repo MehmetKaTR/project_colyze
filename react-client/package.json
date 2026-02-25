@@ -1,7 +1,7 @@
 {
   "name": "colyze",
-  "version": "1.0.2",
-  "description": "Colyze Windows App 1.0.2 : Redesigned results of histogram of table that show on auto page",
+  "version": "1.0.3",
+  "description": "Colyze Windows App 1.0.3 : Fixed .xml file issue related with camera properties",
   "author": "Mehmet Kaan Genç",
   "private": true,
   "main": "main.cjs",
@@ -9,13 +9,15 @@
     "dev": "vite",
     "start": "electron .",
     "build:web": "vite build",
-    "build:electron": "npm run build:web && electron-builder"
+    "build:backend": "powershell -NoProfile -ExecutionPolicy Bypass -File ..\\scripts\\build-backend.ps1",
+    "build:electron": "npm run build:web && electron-builder",
+    "build:setup": "npm run build:backend && npm run build:electron"
   },
   "build": {
     "appId": "com.colyze.app",
     "productName": "Colyze",
     "directories": {
-      "buildResources": "assets",
+      "buildResources": ".",
       "output": "dist_electron"
     },
     "files": [

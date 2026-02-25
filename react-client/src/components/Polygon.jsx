@@ -5,12 +5,16 @@ const Polygon = ({ polygon, onClick, onUpdate, status, scale }) => {
   const [draggingPolygon, setDraggingPolygon] = useState(false);
   const [history, setHistory] = useState([]); // Undo için
 
-  const handleMouseDown = (e, index) => {
+  const getSvgCursorPoint = (e) => {
     const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
     const pt = svg.createSVGPoint();
     pt.x = e.clientX;
     pt.y = e.clientY;
-    const cursorpt = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  };
+
+  const handleMouseDown = (e, index) => {
+    const cursorpt = getSvgCursorPoint(e);
 
     // Sağ tık (taşıma için)
     if (e.button === 2) {
@@ -65,11 +69,7 @@ const Polygon = ({ polygon, onClick, onUpdate, status, scale }) => {
     // Shift + Sol Tık → Nokta ekle
     else if (e.button === 0 && e.shiftKey && polygon.focused) {
       e.preventDefault();
-      const rect = e.target.getBoundingClientRect();
-      const newPoint = {
-        x: (e.clientX - rect.left - 16) / scale,
-        y: (e.clientY - rect.top - 16) / scale,
-      };
+      const newPoint = { x: cursorpt.x, y: cursorpt.y };
       setHistory([...history, polygon.points]);
       const newPoints = [...polygon.points, newPoint];
       onUpdate(polygon.id, newPoints);
@@ -83,16 +83,20 @@ const Polygon = ({ polygon, onClick, onUpdate, status, scale }) => {
 
   const handleMouseMove = (e) => {
     if (draggingIndex !== null) {
+      const dx = e.movementX / (scale || 1);
+      const dy = e.movementY / (scale || 1);
       const newPoints = [...polygon.points];
       newPoints[draggingIndex] = {
-        x: newPoints[draggingIndex].x + e.movementX,
-        y: newPoints[draggingIndex].y + e.movementY,
+        x: newPoints[draggingIndex].x + dx,
+        y: newPoints[draggingIndex].y + dy,
       };
       onUpdate(polygon.id, newPoints);
     } else if (draggingPolygon) {
+      const dx = e.movementX / (scale || 1);
+      const dy = e.movementY / (scale || 1);
       const newPoints = polygon.points.map(p => ({
-        x: p.x + e.movementX,
-        y: p.y + e.movementY,
+        x: p.x + dx,
+        y: p.y + dy,
       }));
       onUpdate(polygon.id, newPoints);
     }
@@ -112,6 +116,9 @@ const Polygon = ({ polygon, onClick, onUpdate, status, scale }) => {
   }, [history, polygon.id, onUpdate]);
 
   const pointString = polygon.points.map(p => `${p.x},${p.y}`).join(" ");
+  const detectedPointString = Array.isArray(polygon.detected_points)
+    ? polygon.detected_points.map((p) => `${p.x},${p.y}`).join(" ")
+    : "";
 
   return (
     <svg
@@ -137,6 +144,14 @@ const Polygon = ({ polygon, onClick, onUpdate, status, scale }) => {
               ? "rgba(192, 36, 36, 0.86)" 
               : "transparent"
       } stroke="white" strokeWidth="2" />
+      {detectedPointString ? (
+        <polyline
+          points={detectedPointString}
+          fill="rgba(245, 158, 11, 0.15)"
+          stroke="rgb(251, 191, 36)"
+          strokeWidth="2"
+        />
+      ) : null}
       {polygon.points.map((p, index) => (
         <circle
           key={index}

@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LoadingScreen } from './components/LoadingScreen'
 import { Navbar } from "./components/Navbar";
 import { MobileMenu } from "./components/MobileMenu";
 import { FParams } from "./components/sections/FParams";
 import { Auto } from "./components/sections/Auto";
 import { Report } from "./components/sections/Report";
+import ToastHost from "./components/common/ToastHost";
+import { pushToast } from "./utils/toast";
 import "./index.css"
 
 function App() {
@@ -12,10 +14,46 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("auto");
 
+  useEffect(() => {
+    const originalAlert = window.alert;
+
+    const inferToastType = (message) => {
+      const text = String(message || "").toLowerCase();
+      if (
+        text.includes("hata") ||
+        text.includes("error") ||
+        text.includes("failed") ||
+        text.includes("bulunamad") ||
+        text.includes("olmad")
+      ) {
+        return "error";
+      }
+      if (
+        text.includes("ok") ||
+        text.includes("tamam") ||
+        text.includes("başar") ||
+        text.includes("kaydedildi")
+      ) {
+        return "success";
+      }
+      return "info";
+    };
+
+    window.alert = (message) => {
+      pushToast(message, inferToastType(message));
+    };
+
+    return () => {
+      window.alert = originalAlert;
+    };
+  }, []);
+
   return (
-    <>{!isLoaded && <LoadingScreen onComplete={() => setIsLoaded(true)} />}{" "}
-    <div
-        className={`min-h-screen transition-opacity duration-700 ${
+    <>
+    {!isLoaded && <LoadingScreen onComplete={() => setIsLoaded(true)} />}
+    <ToastHost />
+    {isLoaded && <div
+        className={`h-screen overflow-hidden transition-opacity duration-700 ${
           isLoaded ? "opacity-100" : "opacity-0"
         } bg-black text-gray-100`}
       >
@@ -30,7 +68,7 @@ function App() {
 
         {activeTab === "auto" ? (
           <div className="block">
-            <Auto key={Date.now()} />
+            <Auto />
           </div>
         ) : (
           <div className="hidden"></div>
@@ -42,7 +80,7 @@ function App() {
           <Report />
         </div>
 
-      </div>
+      </div>}
     </>
   )
 }
