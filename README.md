@@ -1,4 +1,4 @@
-# Project Colyze
+<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/2df1b3a4-305c-4c1d-a827-a338e0df6da9" /># Project Colyze
 
 Project Colyze is a **web-based part measurement and inspection system** that combines **React.js frontend** with a **Flask REST API backend** using **Python and OpenCV**. The system allows users to select regions of interest (ROI) on parts, load them into interactive measurement tools, and automatically analyze **shape, color, and dimensions** to determine if the part meets quality standards (OK / NOK).
 
@@ -12,9 +12,11 @@ Project Colyze is a **web-based part measurement and inspection system** that co
 - **Dual Database Support (optional):** Store part images and results for historical tracking.
 - **Photo Comparison:** Visualize the part **before** and **after** measurement.
 
-  <img width="1902" height="1079" alt="auto" src="https://github.com/user-attachments/assets/55b70376-75b3-4e61-bfa4-aaa5823aedbb" />
-  <img width="1905" height="1079" alt="measure" src="https://github.com/user-attachments/assets/498e2b09-0352-4e20-b41d-1be4fe5e210a" />
-  <img width="1919" height="1079" alt="report" src="https://github.com/user-attachments/assets/63152c18-d1f1-45e4-880e-e92d339ca901" />
+  <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/dcfb7b16-0d05-407a-b51d-f3f6e71a0f58" />
+  <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/3001f420-6a1c-4c34-82d0-9926ff6c2c88" />
+  <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/e1afdb61-d79d-4183-80e4-b85368301aed" />
+  <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/93ac6159-a71d-4cd0-a457-f605791459b1" />
+  <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/fcf521ba-51d4-41d6-bf5a-b60e8722bc89" />
 
 ---
 
