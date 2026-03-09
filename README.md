@@ -1,4 +1,4 @@
-<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/2df1b3a4-305c-4c1d-a827-a338e0df6da9" /># Project Colyze
+# Project Colyze
 
 Project Colyze is a **web-based part measurement and inspection system** that combines **React.js frontend** with a **Flask REST API backend** using **Python and OpenCV**. The system allows users to select regions of interest (ROI) on parts, load them into interactive measurement tools, and automatically analyze **shape, color, and dimensions** to determine if the part meets quality standards (OK / NOK).
 
